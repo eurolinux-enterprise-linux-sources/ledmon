@@ -1,0 +1,10 @@
+--- ledctl_man/src/Makefile	2010-03-23 14:40:33.000000000 +0100
++++ ledctl/src/Makefile	2011-01-10 15:43:06.066168015 +0100
+@@ -54,7 +54,6 @@
+ 	$(OUTDIR)/ledctl.o	\
+ 	$(OBJECTS)
+ 
+-CFLAGS=-O0 -g -Wall -std=c99
+ DEFFLAGS=-D_DEBUG -D_GNU_SOURCE -D_BSD_SOURCE -DDMALLOC_DISABLE
+ INCFLAGS=-I../config
+ LDFLAGS=-O0 -g $(DEFFLAGS)
