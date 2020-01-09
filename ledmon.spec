@@ -1,11 +1,11 @@
 Summary: Enclosure LED Utilities
 Name: ledmon
-Version: 0.74
+Version: 0.78
 Release: 1%{?dist}
 License: GPLv2+
 Group: Applications/System
 URL: http://sourceforge.net/projects/ledmon/
-Source0: http://download.sourceforge.net/%{name}/%{name}-%{version}.tar.bz2
+Source0: http://download.sourceforge.net/%{name}/%{name}-%{version}.tar.gz
 Patch0: ledmon_cflags.patch
 BuildRequires: perl
 BUildRequires: sg3_utils-devel
@@ -21,12 +21,12 @@ types of system: 2-LED system (Activity LED, Status LED) and 3-LED system
 use this application.
 
 %prep
-%setup -q
+%setup -q -n ledmon
 %patch0 -p1 -b .cflags
 
 %build
 # can't use smp_flags because -j4 makes the build fail
-make CFLAGS="$RPM_OPT_FLAGS --std=c99"
+make CFLAGS="$RPM_OPT_FLAGS"
 
 %install
 rm -rf $RPM_BUILD_ROOT
@@ -43,6 +43,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/*/*
 
 %changelog
+* Fri Aug 23 2013 Jan Synáček <jsynacek@redhat.com> - 0.78-1
+- Update to 0.78 (#922976)
+
 * Thu Oct 18 2012 Jan Synáček <jsynacek@redhat.com> - 0.74-1
 - Update to 0.74
 
