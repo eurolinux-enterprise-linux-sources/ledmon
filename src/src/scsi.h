@@ -3,7 +3,7 @@
 
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009,2011, Intel Corporation.
+ * Copyright (C) 2009,2011,2012, Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -62,6 +62,15 @@ char *sas_get_slot_path(const char *path, const char *ctrl_path);
  * @return Number of characters written if successful or -1 in case of error
  *         and errno is set to appropriate error code.
  */
-int scsi_libsas_write(struct block_device *device, enum ibpi_pattern ibpi);
+int scsi_ses_write(struct block_device *device, enum ibpi_pattern ibpi);
+
+/**
+ * @brief Fills encl_index and encl_dev.
+ *
+ * @param[in]      device        Path to block device.
+ *
+ * @return 1 on success, 0 otherwise.
+ * */
+int scsi_get_enclosure(struct block_device *device);
 
 #endif /* _SCSI_H_INCLUDED_ */

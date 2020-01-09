@@ -1,6 +1,6 @@
 #
 #  Intel(R) Enclosure LED Utilities
-#  Copyright (C) 2009,2011, Intel Corporation.
+#  Copyright (C) 2009,2012, Intel Corporation.
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms and conditions of the GNU General Public License,
@@ -58,7 +58,7 @@ LEDCTL_OBJECTS=\
 CFLAGS=-O0 -g -Wall -std=c99
 DEFFLAGS=-D_DEBUG -D_GNU_SOURCE -D_BSD_SOURCE -DDMALLOC_DISABLE
 INCFLAGS=-I../config
-LDFLAGS=-O0 -g $(DEFFLAGS)
+LDFLAGS=-O0 -g $(DEFFLAGS) -lsgutils2
 
 SOURCES:=$(shell find -name "*.[cC]" -print)
 

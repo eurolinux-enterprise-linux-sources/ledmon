@@ -1,6 +1,6 @@
 Summary: Enclosure LED Utilities
 Name: ledmon
-Version: 0.32
+Version: 0.74
 Release: 1%{?dist}
 License: GPLv2+
 Group: Applications/System
@@ -8,8 +8,10 @@ URL: http://sourceforge.net/projects/ledmon/
 Source0: http://download.sourceforge.net/%{name}/%{name}-%{version}.tar.bz2
 Patch0: ledmon_cflags.patch
 BuildRequires: perl
+BUildRequires: sg3_utils-devel
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 Provides: ledctl = %{version}-%{release}
+Requires: sg3_utils-libs
 
 %description
 The ledmon and ledctl are user space applications design to control LED
@@ -41,6 +43,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/*/*
 
 %changelog
+* Thu Oct 18 2012 Jan Synáček <jsynacek@redhat.com> - 0.74-1
+- Update to 0.74
+
 * Mon Mar 05 2012 Jan Synáček <jsynacek@redhat.com> - 0.32-1
 - Update to 0.32
 

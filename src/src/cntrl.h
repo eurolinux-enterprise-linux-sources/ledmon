@@ -3,7 +3,7 @@
 
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009,2011, Intel Corporation.
+ * Copyright (C) 2009,2011,2012, Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -59,6 +59,10 @@ struct cntrl_device {
      * ibpi state buffer for directly attached devices
      */
     void *ibpi_state_buffer;
+    /**
+     * outbound raw byte stream
+     */
+    unsigned char bitstream[4];
     /**
      * host identifier for different hba instances
      */

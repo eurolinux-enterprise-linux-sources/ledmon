@@ -3,7 +3,7 @@
 
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2011, Intel Corporation.
+ * Copyright (C) 2011,2012, Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -36,7 +36,7 @@
  * @return Number of characters written if successful or -1 in case of error
  *         and errno is set to appropriate error code.
  */
-int scsi_libsas_write(struct block_device *device, enum ibpi_pattern ibpi);
+int scsi_ses_write(struct block_device *device, enum ibpi_pattern ibpi);
 
 /**
  * @brief Sends message to SMP device.
@@ -53,7 +53,15 @@ int scsi_libsas_write(struct block_device *device, enum ibpi_pattern ibpi);
 int scsi_smp_write(struct block_device *device, enum ibpi_pattern ibpi);
 
 /**
- * @brief Init smp and get phy index,
+ * @brief Init smp and gets phy index,
+ *
+ * @param[in]      path            Path to the device in sysfs. It can be NULL
+ *                                 to just initialize cntrl and not to get the
+ *                                 phy.
+ * @param[in]      cntrl           Controller device to be initialized.
+ *
+ * @return Phy index on success if path and cntrl weren't NULL
+ *         0 if error occurred or path was NULL.
  */
 int isci_cntrl_init_smp(const char *path, struct cntrl_device *cntrl);
 

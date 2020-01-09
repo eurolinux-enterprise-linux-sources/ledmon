@@ -3,7 +3,7 @@
 
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009,2011, Intel Corporation.
+ * Copyright (C) 2009,2011,2012, Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -88,11 +88,22 @@ struct block_device {
    */
   struct cntrl_device *cntrl;
 
+  struct _host_type *host;
+
+  int host_id;
+
 	/**
    * The index of phy utilized by directly attached to controller block device.
    * It is meaningful if device is controlled by isci driver.
    */
   int phy_index;
+
+  /**
+   * The index in Enclosure. This is what should be used when using SES-2.
+   */
+  int encl_index;
+
+  char encl_dev[PATH_MAX];
 };
 
 /**
@@ -163,5 +174,15 @@ struct cntrl_device *block_get_controller(void *cntrl_list, char *path);
  * all timestamp stored in block device structures.
  */
 extern time_t timestamp;
+
+/**
+ * @brief Determines if block device is attached directly or via expander
+ */
+int dev_directly_attached(const char *path);
+
+/**
+ * @brief Gets the host structure for given control device and host_id
+ */
+struct _host_type *block_get_host(struct cntrl_device *cntrl, int host_id);
 
 #endif /* _BLOCK_H_INCLUDED_ */

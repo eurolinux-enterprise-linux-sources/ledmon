@@ -3,7 +3,7 @@
 
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009,2011, Intel Corporation.
+ * Copyright (C) 2009,2011,2012, Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -137,6 +137,7 @@ struct _host_type *alloc_host(int id, struct _host_type *next)
   if (host) {
     host->host_id = id;
     host->ibpi_state_buffer = NULL;
+    memset(host->bitstream, 0, sizeof(host->bitstream));
     host->next = next;
   }
   return host;
@@ -211,7 +212,7 @@ static unsigned int _ahci_em_messages(const char *path)
   struct dirent *de = NULL;
 
   /* old kernel (prior to 2.6.36) */
-  if (get_int(path, 0, "driver/module/parameters/ahci_em_messages") != 0);
+  if (get_int(path, 0, "driver/module/parameters/ahci_em_messages") != 0)
       return 1;
 
   if (!get_int("", 0, "sys/module/libahci/parameters/ahci_em_messages"))

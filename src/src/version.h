@@ -3,7 +3,7 @@
 
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009,2011, Intel Corporation.
+ * Copyright (C) 2009,2011,2012, Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -36,7 +36,7 @@
  * in makefile to reflect current version number.
  */
 #ifndef VERSION_MINOR
-#define VERSION_MINOR    32
+#define VERSION_MINOR    74
 #endif
 
 #endif /* _VERSION_H_INCLUDED_ */
