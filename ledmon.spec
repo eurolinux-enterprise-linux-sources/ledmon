@@ -1,6 +1,6 @@
 Summary: Enclosure LED Utilities
 Name: ledmon
-Version: 0.78
+Version: 0.79
 Release: 1%{?dist}
 License: GPLv2+
 Group: Applications/System
@@ -21,7 +21,7 @@ types of system: 2-LED system (Activity LED, Status LED) and 3-LED system
 use this application.
 
 %prep
-%setup -q -n ledmon
+%setup -q
 %patch0 -p1 -b .cflags
 
 %build
@@ -43,6 +43,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/*/*
 
 %changelog
+* Tue Jun 10 2014 Jan Synáček <jsynacek@redhat.com> - 0.79-1
+- Update to 0.79 (#1030622)
+
 * Fri Aug 23 2013 Jan Synáček <jsynacek@redhat.com> - 0.78-1
 - Update to 0.78 (#922976)
 
