@@ -179,13 +179,13 @@ static void _ledctl_help(void)
 	printf("Mandatory arguments for long options are mandatory for" \
 	       " short options, too.\n\n");
 	printf
-	    ("--log=PATH\t\t\t  Use local log file instead\n" \
+	    ("--log=PATH,\t-l PATH\t\t  Use local log file instead\n" \
 	     "\t\t\t\t  /var/log/ledctl.log global file.\n");
-	printf("--config=PATH,  -c PATH\t\t  Use alternate configuration" \
+	printf("--config=PATH,\t-c PATH\t\t  Use alternate configuration" \
 	       " file (not yet\n\t\t\t\t  implemented).\n");
-	printf("--help\t\t\t\t  Displays this help text.\n");
+	printf("--help,\t\t-h\t\t  Displays this help text.\n");
 	printf
-	    ("--version\t\t\t  Displays version and license information.\n\n");
+	    ("--version,\t-v\t\t  Displays version and license information.\n\n");
 	printf("Patterns:\n"
 	       "\tCommon patterns are:\n"
 	       "\t\tlocate, locate_off, normal, off, degraded, rebuild,\n" ""
@@ -203,10 +203,8 @@ static void _ledctl_help(void)
 	       "\t\tpfa=ses_rsvd_dev, failure=ses_fault,\n"
 	       "\t\tdisk_failed=ses_fault\n");
 	printf("Refer to ledctl(8) man page for more detailed description.\n");
-	printf("Report bugs in the tracker 'Bugs' at " \
-	       "http://sourceforge.net/projects/ledmon\n");
-	printf("(direct link: http://sourceforge.net/tracker" \
-	       "/?group_id=393394&atid=1632895)\n\n");
+	printf("Bugs should be reported at: " \
+	       "http://sourceforge.net/p/ledmon/bugs \n");
 }
 
 /**

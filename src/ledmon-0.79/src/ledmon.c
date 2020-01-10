@@ -253,10 +253,8 @@ static void _ledmon_help(void)
 	printf
 	    ("--version\t\t\t  Displays version and license information.\n\n");
 	printf("Refer to ledmon(8) man page for more detailed description.\n");
-	printf("Report bugs in the tracker 'Bugs' at "
-	       "http://sourceforge.net/projects/ledmon\n");
-	printf("(direct link: http://sourceforge.net/tracker"
-	       "/?group_id=393394&atid=1632895)\n\n");
+	printf("Bugs should be reported at: "
+	       "http://sourceforge.net/p/ledmon/bugs \n");
 }
 
 /**
@@ -768,6 +766,7 @@ static void _ledmon_execute(void)
 int main(int argc, char *argv[])
 {
 	status_t status = STATUS_SUCCESS;
+	int i;
 
 	set_invocation_name(argv[0]);
 	openlog(progname, LOG_PID | LOG_PERROR, LOG_DAEMON);
@@ -800,7 +799,7 @@ int main(int argc, char *argv[])
 		log_debug("main(): setsid() failed (errno=%d).", errno);
 		exit(EXIT_FAILURE);
 	}
-	for (int i = getdtablesize() - 1; i >= 0; --i)
+	for (i = getdtablesize() - 1; i >= 0; --i)
 		close(i);
 	int t = open("/dev/null", O_RDWR);
 	dup(t);

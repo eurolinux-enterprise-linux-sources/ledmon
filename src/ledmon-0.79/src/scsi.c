@@ -656,6 +656,8 @@ static char *get_drive_sas_addr(const char *path)
 	len = strnlen(addr, ADDR_LEN);
 	if (len && addr[len - 1] == '\n')
 		addr[len - 1] = 0;
+	else /* make sure that addr is null-terminated */
+		addr[len < ADDR_LEN ? len : ADDR_LEN - 1] = 0;
 	free(end_dev);
 	free(buff);
 	return strdup(addr);
@@ -722,12 +724,12 @@ int scsi_ses_write(struct block_device *device, enum ibpi_pattern ibpi)
 	int fd = -1;
 	char *addr = NULL;
 
+	if (!device || !device->sysfs_path)
+		__set_errno_and_return(EINVAL);
+
 	/* write only if state has changed */
 	if (ibpi == device->ibpi_prev)
 		return 1;
-
-	if (!device || !device->sysfs_path)
-		__set_errno_and_return(EINVAL);
 
 	if ((ibpi < IBPI_PATTERN_NORMAL) || (ibpi > SES_REQ_FAULT))
 		__set_errno_and_return(ERANGE);

@@ -1,13 +1,12 @@
 Summary: Enclosure LED Utilities
 Name: ledmon
-Version: 0.77
-Release: 1%{?dist}
+Version: 0.79
+Release: 3%{?dist}
 License: GPLv2+
 Group: Applications/System
 URL: http://sourceforge.net/projects/ledmon/
 Source0: http://download.sourceforge.net/%{name}/%{name}-%{version}.tar.gz
 Patch0: ledmon_cflags.patch
-Patch1: ledmon-doc.patch
 BuildRequires: perl
 BuildRequires: sg3_utils-devel
 Obsoletes: ledctl = 0.1-1
@@ -24,7 +23,6 @@ use this application.
 %prep
 %setup -q
 %patch0 -p1 -b .cflags
-%patch1 -p1 -b .doc
 
 %build
 # can't use smp_flags because -j4 makes the build fail
@@ -40,6 +38,16 @@ make install INSTALL="%{__install} -p" DESTDIR=$RPM_BUILD_ROOT SBIN_DIR=$RPM_BUI
 %{_mandir}/*/*
 
 %changelog
+* Fri Jan 24 2014 Daniel Mach <dmach@redhat.com> - 0.79-3
+- Mass rebuild 2014-01-24
+
+* Fri Dec 27 2013 Daniel Mach <dmach@redhat.com> - 0.79-2
+- Mass rebuild 2013-12-27
+
+* Thu Nov 28 2013 Jan Synáček <jsynacek@redhat.com> - 0.79-1
+- Update to 0.79
+- Resolves: #887206
+
 * Fri Apr 19 2013 Jan Synáček <jsynacek@redhat.com> - 0.77-1
 - Update to 0.77
 - Documentation enhancements

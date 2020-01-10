@@ -91,8 +91,15 @@ static int _is_ahci_cntrl(const char *path)
 
 static int _is_dellssd_cntrl(const char *path)
 {
-	return get_uint64(path, 0, "vendor") == 0x1344L &&
-	    get_uint64(path, 0, "device") == 0x5150L;
+	uint64_t vdr, dev, svdr, cls;
+
+	vdr = get_uint64(path, 0, "vendor");
+	dev = get_uint64(path, 0, "device");
+	cls = get_uint64(path, 0, "class");
+	svdr = get_uint64(path, 0, "subsystem_vendor");
+
+	return ((vdr == 0x1344L && dev == 0x5150L) || /* micron ssd */
+	        (svdr == 0x1028 && cls == 0x10802));  /* nvmhci ssd */
 }
 
 /**
@@ -225,19 +232,22 @@ static unsigned int _ahci_em_messages(const char *path)
 		return 0;
 	}
 
-	/* name contain controller name (ie. ahci),*/
-	/* so check if libahci holds this driver   */
+	/* check if the directory /sys/module/libahci/holders exists */
 	dh = opendir("/sys/module/libahci/holders");
 	if (dh) {
+		/* name contain controller name (ie. ahci),*/
+		/* so check if libahci holds this driver   */
 		while ((de = readdir(dh))) {
 			if (!strcmp(de->d_name, name))
 				break;
 		}
 		closedir(dh);
+		free(link);
+		return de ? 1 : 0;
+	} else {
+		free(link);
+		return 1;
 	}
-
-	free(link);
-	return de ? 1 : 0;
 }
 
 /*
