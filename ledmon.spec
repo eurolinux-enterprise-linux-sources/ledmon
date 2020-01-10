@@ -1,12 +1,13 @@
 Summary: Enclosure LED Utilities
 Name: ledmon
 Version: 0.79
-Release: 3%{?dist}
+Release: 4%{?dist}
 License: GPLv2+
 Group: Applications/System
 URL: http://sourceforge.net/projects/ledmon/
 Source0: http://download.sourceforge.net/%{name}/%{name}-%{version}.tar.gz
 Patch0: ledmon_cflags.patch
+Patch1: 0001-Recognize-bool-values-in-sysfs.patch
 BuildRequires: perl
 BuildRequires: sg3_utils-devel
 Obsoletes: ledctl = 0.1-1
@@ -23,6 +24,7 @@ use this application.
 %prep
 %setup -q
 %patch0 -p1 -b .cflags
+%patch1 -p1
 
 %build
 # can't use smp_flags because -j4 makes the build fail
@@ -38,6 +40,9 @@ make install INSTALL="%{__install} -p" DESTDIR=$RPM_BUILD_ROOT SBIN_DIR=$RPM_BUI
 %{_mandir}/*/*
 
 %changelog
+* Wed Sep 16 2015 Jan Synáček <jsynacek@redhat.com> - 0.79-4
+- Fix: Ledmon does not work with AHCI (#1262799)
+
 * Fri Jan 24 2014 Daniel Mach <dmach@redhat.com> - 0.79-3
 - Mass rebuild 2014-01-24
 
