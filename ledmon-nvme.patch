@@ -1,0 +1,67 @@
+commit 868a01e894f6abd33a98457a7ee4c1aa7e1eb2fe
+Author: Artur Paszkiewicz <artur.paszkiewicz@intel.com>
+Date:   Tue May 9 11:21:25 2017 +0200
+
+    Don't rely on searching for "/block" in sysfs path for detecting partitions
+    
+    It is simpler and more reliable to check for a "partition" file in the
+    device's directory (supported since kernel 2.6.28). The previous
+    approach would fail for nvme devices because their device path looks
+    like this:
+    /sys/devices/pci0000:00/0000:00:0c.0/nvme/nvme0/nvme0n1
+    
+    Fixes: b30173ec8c05 ("* fix off-normal-failure block dev status loop * remove unused raid->slave_list member * support md raid on block device partitions")
+
+diff --git a/src/slave.c b/src/slave.c
+index 9843ffd..436ed4a 100644
+--- a/src/slave.c
++++ b/src/slave.c
+@@ -22,6 +22,8 @@
+ #include <string.h>
+ #include <stdlib.h>
+ #include <stdint.h>
++#include <stdio.h>
++#include <sys/stat.h>
+ 
+ #if _HAVE_DMALLOC_H
+ #include <dmalloc.h>
+@@ -100,27 +102,26 @@ static struct block_device *_get_block(const char *path, void *block_list)
+ {
+ 	char temp[PATH_MAX];
+ 	char link[PATH_MAX];
+-	char *ptr;
+-	struct block_device *device = NULL;
+ 
+ 	str_cpy(temp, path, PATH_MAX);
+ 	str_cat(temp, "/block", PATH_MAX);
+ 
+-	if (realpath(temp, link)) {
+-		ptr = strrchr(link, '/');
+-		if (ptr && link < ptr - strlen("/block")) {
+-			/* translate partition to master block dev */
+-			if(strncmp(
+-				ptr - strlen("/block"),
+-				"/block",
+-				strlen("/block"))) {
++	if (!realpath(temp, link))
++		return NULL;
+ 
++	/* translate partition to master block dev */
++	if (snprintf(temp, PATH_MAX, "%s/partition", link) > 0) {
++		struct stat sb;
++		char *ptr;
++
++		if (stat(temp, &sb) == 0 && S_ISREG(sb.st_mode)) {
++			ptr = strrchr(link, '/');
++			if (ptr)
+ 				*ptr = '\0';
+-			}
+-			device = list_first_that(block_list, _compare, link);
+ 		}
+ 	}
+-	return device;
++
++	return list_first_that(block_list, _compare, link);
+ }
+ 
+ /**

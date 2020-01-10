@@ -1,15 +1,13 @@
---- ledmon-0.79/src/Makefile	2013-11-27 16:38:17.000000000 +0100
-+++ ledmon-0.79-new/src/Makefile	2013-11-28 11:31:17.781209924 +0100
-@@ -55,10 +55,10 @@
+--- ledmon-0.80/src/Makefile	2016-11-25 13:59:48.000000000 +0100
++++ ledmon-0.80-new/src/Makefile	2016-12-06 14:03:59.935258740 +0100
+@@ -57,10 +57,6 @@ LEDCTL_OBJECTS=\
  	$(OUTDIR)/ledctl.o	\
  	$(OBJECTS)
  
--CFLAGS=-O0 -g -Wall
-+CFLAGS=-O2 -g -Wall
+-CXFLAGS=-O0 -g
+-CWFLAGS=-Wall
+-CFLAGS=$(CXFLAGS) $(CWFLAGS)
+-
  DEFFLAGS=-D_DEBUG -D_GNU_SOURCE -D_BSD_SOURCE -DDMALLOC_DISABLE
- INCFLAGS=-I../config
--LDFLAGS=-O0 -g $(DEFFLAGS) -lsgutils2
-+LDFLAGS=-O2 -g $(DEFFLAGS) -lsgutils2
- 
- SOURCES:=$(shell find -name "*.[cC]" -print)
- 
+ CPPFLAGS=$(DEFFLAGS)
+ ALL_CPPFLAGS=$(CPPFLAGS) -I../config

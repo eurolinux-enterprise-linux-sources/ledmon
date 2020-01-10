@@ -1,13 +1,13 @@
 Summary: Enclosure LED Utilities
 Name: ledmon
-Version: 0.79
-Release: 4%{?dist}
+Version: 0.80
+Release: 2%{?dist}
 License: GPLv2+
 Group: Applications/System
 URL: http://sourceforge.net/projects/ledmon/
 Source0: http://download.sourceforge.net/%{name}/%{name}-%{version}.tar.gz
 Patch0: ledmon_cflags.patch
-Patch1: 0001-Recognize-bool-values-in-sysfs.patch
+Patch1: ledmon-nvme.patch
 BuildRequires: perl
 BuildRequires: sg3_utils-devel
 Obsoletes: ledctl = 0.1-1
@@ -40,6 +40,12 @@ make install INSTALL="%{__install} -p" DESTDIR=$RPM_BUILD_ROOT SBIN_DIR=$RPM_BUI
 %{_mandir}/*/*
 
 %changelog
+* Fri May 12 2017 Jan Synáček <jsynacek@redhat.com> - 0.80-2
+- LEDs don't blink during resync/recovery operations on the NVMe RAID volume (#1449990)
+
+* Mon Feb  6 2017 Jan Synáček <jsynacek@redhat.com> - 0.80-1
+- Update to 0.80 (#1380018)
+
 * Wed Sep 16 2015 Jan Synáček <jsynacek@redhat.com> - 0.79-4
 - Fix: Ledmon does not work with AHCI (#1262799)
 
