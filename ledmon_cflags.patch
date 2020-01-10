@@ -1,0 +1,10 @@
+--- ledmon-0.72/src/Makefile.orig	2012-08-06 11:29:39.000000000 +0200
++++ ledmon-0.72/src/Makefile	2012-08-07 07:19:25.241220694 +0200
+@@ -55,7 +55,6 @@ LEDCTL_OBJECTS=\
+ 	$(OUTDIR)/ledctl.o	\
+ 	$(OBJECTS)
+ 
+-CFLAGS=-O0 -g -Wall -std=c99
+ DEFFLAGS=-D_DEBUG -D_GNU_SOURCE -D_BSD_SOURCE -DDMALLOC_DISABLE
+ INCFLAGS=-I../config
+ LDFLAGS=-O0 -g $(DEFFLAGS) -lsgutils2
