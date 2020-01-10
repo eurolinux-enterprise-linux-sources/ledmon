@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2011-2016 Intel Corporation.
+ * Copyright (C) 2011-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,37 +17,37 @@
  *
  */
 
-#include <config.h>
 
-#include <limits.h>
+#include <dirent.h>
 #include <errno.h>
-#include <unistd.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <linux/bsg.h>
+#include <scsi/sg.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <dirent.h>
-
-#include <scsi/sg.h>
-#include <linux/bsg.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <sys/sysmacros.h>
 
 #if _HAVE_DMALLOC_H
 #include <dmalloc.h>
 #endif
 
-#include "ibpi.h"
-#include "status.h"
-#include "list.h"
 #include "block.h"
 #include "cntrl.h"
-#include "scsi.h"
+#include "config.h"
 #include "enclosure.h"
+#include "ibpi.h"
+#include "list.h"
+#include "scsi.h"
+#include "smp.h"
+#include "status.h"
 #include "sysfs.h"
 #include "utils.h"
-#include "smp.h"
 
 #define GPIO_TX_GP1	0x01
 
@@ -75,7 +75,6 @@ static const struct gpio_rx_table {
 	[IBPI_PATTERN_NORMAL]         = { INIT_IBPI(LED_SOF,LED_OFF,LED_OFF), 1 }, /* OK */
 	[IBPI_PATTERN_DEGRADED]       = { INIT_IBPI(LED_SOF,LED_OFF,LED_OFF), 0 }, /* NO */
 	[IBPI_PATTERN_REBUILD]        = { INIT_IBPI(LED_SOF,LED_ON,LED_ON), 1 }, /* OK */
-	[IBPI_PATTERN_REBUILD_P]      = { INIT_IBPI(LED_SOF,LED_OFF,LED_OFF), 0 }, /* NO */
 	[IBPI_PATTERN_FAILED_ARRAY]   = { INIT_IBPI(LED_SOF,LED_4HZ,LED_OFF), 0 }, /* NO */
 	[IBPI_PATTERN_HOTSPARE]       = { INIT_IBPI(LED_SOF,LED_OFF,LED_4HZ), 0 }, /* NO */
 	[IBPI_PATTERN_PFA]            = { INIT_IBPI(LED_SOF,LED_OFF,LED_2HZ), 0 }, /* NO */
@@ -494,7 +493,12 @@ int scsi_smp_fill_buffer(struct block_device *device, enum ibpi_pattern ibpi)
 		set_raw_pattern(device->phy_index,
 			&device->host->bitstream[0], &ibpi2sgpio[ibpi].pattern);
 	} else {
-		device->host->ibpi_state_buffer[device->phy_index] =
+		/*
+		 * GPIO_TX[n] register has the highest numbered drive of the
+		 * four in the first byte and the lowest numbered drive in the
+		 * fourth byte. See SFF-8485 Rev. 0.7 Table 24.
+		 */
+		gpio_tx[device->phy_index + 3 - (device->phy_index % 4) * 2] =
 			ibpi2sgpio[ibpi].pattern;
 	}
 

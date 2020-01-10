@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,23 +17,24 @@
  *
  */
 
-#include <config.h>
 #include <limits.h>
-#include <string.h>
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
 
 #if _HAVE_DMALLOC_H
 #include <dmalloc.h>
 #endif
 
-#include "status.h"
+#include "config.h"
 #include "ibpi.h"
-#include "utils.h"
 #include "list.h"
-#include "sysfs.h"
-#include "block.h"
 #include "slave.h"
+#include "status.h"
+#include "sysfs.h"
+#include "utils.h"
 
 /**
  */
@@ -89,43 +90,40 @@ static unsigned int _get_slot(const char *path)
 
 /**
  */
-static int _compare(struct block_device *device, const char *path)
-{
-	return (strcmp(device->sysfs_path, path) == 0);
-}
-
-/**
- */
-static struct block_device *_get_block(const char *path, void *block_list)
+static struct block_device *_get_block(const char *path, struct list *block_list)
 {
 	char temp[PATH_MAX];
 	char link[PATH_MAX];
-	char *ptr;
-	struct block_device *device = NULL;
+	struct block_device *device;
 
 	str_cpy(temp, path, PATH_MAX);
 	str_cat(temp, "/block", PATH_MAX);
 
-	if (realpath(temp, link)) {
-		ptr = strrchr(link, '/');
-		if (ptr && link < ptr - strlen("/block")) {
-			/* translate partition to master block dev */
-			if(strncmp(
-				ptr - strlen("/block"),
-				"/block",
-				strlen("/block"))) {
+	if (!realpath(temp, link))
+		return NULL;
 
+	/* translate partition to master block dev */
+	if (snprintf(temp, PATH_MAX, "%s/partition", link) > 0) {
+		struct stat sb;
+		char *ptr;
+
+		if (stat(temp, &sb) == 0 && S_ISREG(sb.st_mode)) {
+			ptr = strrchr(link, '/');
+			if (ptr)
 				*ptr = '\0';
-			}
-			device = list_first_that(block_list, _compare, link);
 		}
 	}
-	return device;
+
+	list_for_each(block_list, device) {
+		if (strcmp(device->sysfs_path, link) == 0)
+			return device;
+	}
+	return NULL;
 }
 
 /**
  */
-struct slave_device *slave_device_init(const char *path, void *block_list)
+struct slave_device *slave_device_init(const char *path, struct list *block_list)
 {
 	struct slave_device *device = NULL;
 	struct block_device *block;
@@ -148,6 +146,5 @@ struct slave_device *slave_device_init(const char *path, void *block_list)
  */
 void slave_device_fini(struct slave_device *device)
 {
-	(void)device;
-	/* Function reserved for future improvements. */
+	free(device);
 }

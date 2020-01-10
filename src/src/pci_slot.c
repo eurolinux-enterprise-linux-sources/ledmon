@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2016 Intel Corporation.
+ * Copyright (C) 2016-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,11 +17,9 @@
  *
  */
 
-#include <config.h>
-
+#include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <limits.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -29,6 +27,7 @@
 #include <dmalloc.h>
 #endif
 
+#include "config.h"
 #include "pci_slot.h"
 #include "utils.h"
 
@@ -47,6 +46,11 @@ struct pci_slot *pci_slot_init(const char *path)
 	result->address = get_text(path, "address");
 	result->attention = get_int(path, -1, "attention");
 
+	if (result->attention == -1) {
+		pci_slot_fini(result);
+		return NULL;
+	}
+
 	return result;
 }
 
@@ -57,9 +61,8 @@ struct pci_slot *pci_slot_init(const char *path)
 void pci_slot_fini(struct pci_slot *slot)
 {
 	if (slot) {
-		if (slot->sysfs_path)
-			free(slot->sysfs_path);
-		if (slot->address)
-			free(slot->address);
+		free(slot->sysfs_path);
+		free(slot->address);
+		free(slot);
 	}
 }

@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,35 +17,37 @@
  *
  */
 
-#include <config.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <limits.h>
 #include <ctype.h>
-#include <string.h>
-#include <time.h>
-#include <getopt.h>
-#include <syslog.h>
-#include <stdlib.h>
 #include <errno.h>
+#include <getopt.h>
+#include <limits.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <syslog.h>
+#include <time.h>
+#include <unistd.h>
+#include <sys/sysmacros.h>
 
 #if _HAVE_DMALLOC_H
 #include <dmalloc.h>
 #endif
 
-#include "status.h"
-#include "list.h"
-#include "cntrl.h"
-#include "sysfs.h"
-#include "ibpi.h"
+#include "ahci.h"
 #include "block.h"
+#include "cntrl.h"
+#include "config.h"
+#include "config_file.h"
+#include "ibpi.h"
+#include "list.h"
+#include "scsi.h"
+#include "status.h"
+#include "sysfs.h"
 #include "utils.h"
 #include "version.h"
-#include "scsi.h"
-#include "ahci.h"
 
 /**
  * @brief An IBPI state structure.
@@ -55,17 +57,17 @@
  */
 struct ibpi_state {
 	enum ibpi_pattern ibpi;
-	void *block_list;
+	struct list block_list;
 };
 
 /**
  * @brief List of IBPI patterns.
  *
- * This variable holds a pointer to a list of IBPI patterns the user requested
- * to be visualized. Each element on the list is struct ibpi_state type. There's
- * only one instance of each IBPI pattern on the list (no duplicates).
+ * This is a list of IBPI patterns the user requested to be visualized.
+ * Each element on the list is struct ibpi_state type. There's only one
+ * instance of each IBPI pattern on the list (no duplicates).
  */
-static void *ibpi_list = NULL;
+static struct list ibpi_list;
 
 /**
  * @brief IBPI pattern names.
@@ -79,13 +81,14 @@ const char *ibpi_str[] = {
 	[IBPI_PATTERN_ONESHOT_NORMAL] = "",
 	[IBPI_PATTERN_DEGRADED]       = "ICA",
 	[IBPI_PATTERN_REBUILD]        = "REBUILD",
-	[IBPI_PATTERN_REBUILD_P]      = "REBUILD",
 	[IBPI_PATTERN_FAILED_ARRAY]   = "IFA",
 	[IBPI_PATTERN_HOTSPARE]       = "HOTSPARE",
 	[IBPI_PATTERN_PFA]            = "PFA",
 	[IBPI_PATTERN_FAILED_DRIVE]   = "FAILURE",
 	[IBPI_PATTERN_LOCATE]         = "LOCATE",
-	[IBPI_PATTERN_LOCATE_OFF]     = "LOCATE_OFF"
+	[IBPI_PATTERN_LOCATE_OFF]     = "LOCATE_OFF",
+	[IBPI_PATTERN_ADDED]          = "ADDED",
+	[IBPI_PATTERN_REMOVED]        = "REMOVED"
 };
 
 /**
@@ -93,22 +96,23 @@ const char *ibpi_str[] = {
  * information about the version of ledctl utility.
  */
 static char *ledctl_version = "Intel(R) Enclosure LED Control Application %d.%d\n"
-			      "Copyright (C) 2009-2016 Intel Corporation.\n";
+			      "Copyright (C) 2009-2018 Intel Corporation.\n";
 
 /**
  * Internal variable of monitor service. It is used to help parse command line
  * short options.
  */
-static char *shortopt = "c:hvl:";
+static char *shortopt = "hLxvl:";
 
 /**
  * Internal enumeration type. It is used to help parse command line arguments.
  */
 enum longopt {
-	OPT_CONFIG,
 	OPT_HELP,
 	OPT_LOG,
-	OPT_VERSION
+	OPT_VERSION,
+	OPT_LIST_CTRL,
+	OPT_LISTED_ONLY,
 };
 
 /**
@@ -116,12 +120,21 @@ enum longopt {
  * long options.
  */
 static struct option longopt[] = {
-	[OPT_CONFIG]  = {"config", required_argument, NULL, 'c'},
 	[OPT_HELP]    = {"help", no_argument, NULL, 'h'},
 	[OPT_LOG]     = {"log", required_argument, NULL, 'l'},
 	[OPT_VERSION] = {"version", no_argument, NULL, 'v'},
+	[OPT_LIST_CTRL] = {"list-controllers", no_argument, NULL, 'L'},
+	[OPT_LISTED_ONLY] = {"listed-only", no_argument, NULL, 'x'},
 			{NULL, no_argument, NULL, '\0'}
 };
+
+static int listed_only;
+
+static void ibpi_state_fini(struct ibpi_state *p)
+{
+	list_clear(&p->block_list);
+	free(p);
+}
 
 /**
  * @brief Finalizes LED control utility.
@@ -138,9 +151,8 @@ static struct option longopt[] = {
 static void _ledctl_fini(int __attribute__ ((unused)) status,
 			 void *__attribute__ ((unused)) ignore)
 {
-	sysfs_fini();
-	if (ibpi_list)
-		list_fini(ibpi_list);
+	sysfs_reset();
+	list_erase(&ibpi_list);
 	log_close();
 }
 
@@ -176,35 +188,34 @@ static void _ledctl_help(void)
 	printf(ledctl_version, VERSION_MAJOR, VERSION_MINOR);
 	printf("\nUsage: %s [OPTIONS] pattern=list_of_devices ...\n\n",
 	       progname);
-	printf("Mandatory arguments for long options are mandatory for" \
-	       " short options, too.\n\n");
-	printf
-	    ("--log=PATH,\t-l PATH\t\t  Use local log file instead\n" \
-	     "\t\t\t\t  /var/log/ledctl.log global file.\n");
-	printf("--config=PATH,\t-c PATH\t\t  Use alternate configuration" \
-	       " file (not yet\n\t\t\t\t  implemented).\n");
-	printf("--help,\t\t-h\t\t  Displays this help text.\n");
-	printf
-	    ("--version,\t-v\t\t  Displays version and license information.\n\n");
-	printf("Patterns:\n"
+	printf("Mandatory arguments for long options are mandatory for short options, too.\n\n");
+	print_opt("--listed-only", "-x",
+			  "Ledctl will change state only for given devices.");
+	print_opt("--list-controllers", "-L",
+			  "Displays list of controllers detected by ledmon.");
+	print_opt("--log=PATH", "-l PATH",
+			  "Use local log file instead /var/log/ledctl.log.");
+	print_opt("--help", "-h", "Displays this help text.");
+	print_opt("--version", "-v",
+			  "Displays version and license information.");
+	printf("\nPatterns:\n"
 	       "\tCommon patterns are:\n"
 	       "\t\tlocate, locate_off, normal, off, degraded, rebuild,\n" ""
-	       "\t\trebuild_p, failed_array, hotspare, pfa, failure,\n"
-	       "\t\tdisk_failed\n" "\tSES-2 only patterns:\n"
+	       "\t\tfailed_array, hotspare, pfa, failure, disk_failed\n"
+	       "\tSES-2 only patterns:\n"
 	       "\t\tses_abort, ses_rebuild, ses_ifa, ses_ica, ses_cons_check,\n"
 	       "\t\tses_hotspare, ses_rsvd_dev, ses_ok, ses_ident, ses_rm,\n"
-	       "\t\tses_insert, ses_missing, ses_dnr, ses_active,\n"
-	       "\t\tses_enbale_bb, ses_enable_ba, ses_devoff, ses_fault\n"
+	       "\t\tses_insert, ses_missing, ses_dnr, ses_active, ses_prdfail,\n"
+	       "\t\tses_enable_bb, ses_enable_ba, ses_devoff, ses_fault\n"
 	       "\tAutomatic translation form IBPI into SES-2:\n"
 	       "\t\tlocate=ses_ident, locate_off=~ses_ident,\n"
 	       "\t\tnormal=ses_ok, off=ses_ok, degraded=ses_ica,\n"
-	       "\t\trebuild=ses_rebuild rebuild_p=ses_rebuild,\n"
-	       "\t\tfailed_array=ses_ifa, hotspare=ses_hotspare\n"
-	       "\t\tpfa=ses_rsvd_dev, failure=ses_fault,\n"
+	       "\t\trebuild=ses_rebuild, failed_array=ses_ifa,\n"
+	       "\t\thotspare=ses_hotspare, pfa=ses_prdfail, failure=ses_fault,\n"
 	       "\t\tdisk_failed=ses_fault\n");
 	printf("Refer to ledctl(8) man page for more detailed description.\n");
 	printf("Bugs should be reported at: " \
-	       "http://sourceforge.net/p/ledmon/bugs \n");
+		"https://github.com/intel/ledmon/issues\n");
 }
 
 /**
@@ -217,36 +228,21 @@ static void _ledctl_help(void)
  * @param[in]      ibpi           an IBPI pattern to add.
  *
  * @return Pointer to the created element if successful, otherwise function
- *         returns NULL. The NULL pointer means either initialization
- *         of list for block devices failed or putting new element
- *         no IBPI state list failed.
+ *         returns NULL. The NULL pointer means element allocation failed.
  */
-static void *_ibpi_state_init(enum ibpi_pattern ibpi)
+static struct ibpi_state *_ibpi_state_init(enum ibpi_pattern ibpi)
 {
-	struct ibpi_state state;
+	struct ibpi_state *state = malloc(sizeof(struct ibpi_state));
 
-	if (list_init(&state.block_list) != STATUS_SUCCESS)
+	if (!state)
 		return NULL;
-	state.ibpi = ibpi;
-	return list_put(ibpi_list, &state, sizeof(struct ibpi_state));
-}
 
-/**
- * @brief Sets an IBPI state.
- *
- * This is internal function of ledctl utility. The function sets an IBPI state
- * for a block device. If existing pattern has higher priority then state
- * requested the function does nothing.
- *
- * @param[in]      block          pointer to block device structure.
- * @param[in]      ibpi           IBPI pattern/state to be set.
- *
- * @return The function does not return a value.
- */
-static void _set_state(struct block_device **block, enum ibpi_pattern ibpi)
-{
-	if ((*block)->ibpi < ibpi)
-		(*block)->ibpi = ibpi;
+	list_init(&state->block_list, NULL);
+	state->ibpi = ibpi;
+
+	list_append(&ibpi_list, state);
+
+	return state;
 }
 
 /**
@@ -263,8 +259,13 @@ static void _set_state(struct block_device **block, enum ibpi_pattern ibpi)
  */
 static void _determine(struct ibpi_state *state)
 {
-	if (list_is_empty(state->block_list) == 0) {
-		list_for_each_parm(state->block_list, _set_state, state->ibpi);
+	if (list_is_empty(&state->block_list) == 0) {
+		struct block_device *block;
+
+		list_for_each(&state->block_list, block) {
+			if (block->ibpi < state->ibpi)
+				block->ibpi = state->ibpi;
+		}
 	} else {
 		log_warning
 		    ("IBPI %s: missing block device(s)... pattern ignored.",
@@ -285,31 +286,30 @@ static void _determine(struct ibpi_state *state)
  *         The following status codes function returns:
  *
  *         STATUS_LIST_EMPTY      the specified list has no elements.
- *         STATUS_NULL_POINTER    ibpi_list is NULL.
  */
-static status_t _ibpi_state_determine(void *ibpi_list)
+static status_t _ibpi_state_determine(struct list *ibpi_list)
 {
-	if (list_is_empty(ibpi_list) == 0)
-		return list_for_each(ibpi_list, _determine);
+	if (list_is_empty(ibpi_list) == 0) {
+		struct ibpi_state *state;
+
+		list_for_each(ibpi_list, state)
+			_determine(state);
+		return STATUS_SUCCESS;
+	}
 	log_error("missing operand(s)... run %s --help for details.", progname);
 	return STATUS_LIST_EMPTY;
 }
 
-/**
- * @brief Tests the IBPI state.
- *
- * This is internal function of ledctl utility. The function checks if the given
- * IBPI state is already on the list. The function is designed to be used as the
- * 'test' argument of list_first_that() function.
- *
- * @param[in]      state          pointer to IBPI state structure.
- * @param[in]      ibpi           IBPI state is being searched.
- *
- * @return 1 if the IBPI state matches, otherwise the function returns 0.
- */
-static int _ibpi_find(struct ibpi_state *state, enum ibpi_pattern ibpi)
+static struct ibpi_state *_ibpi_find(const struct list *ibpi_list,
+				     enum ibpi_pattern ibpi)
 {
-	return (state->ibpi == ibpi);
+	struct ibpi_state *state;
+
+	list_for_each(ibpi_list, state) {
+		if (state->ibpi == ibpi)
+			return state;
+	}
+	return NULL;
 }
 
 /**
@@ -363,7 +363,7 @@ static status_t _set_log_path(const char *path)
  * @param[in]      name       a name of IBPI pattern i.e. taken from command
  *                            line interface. It might be 'locate', 'normal',
  *                            'locate_off', 'off', 'ica', 'degraded', 'rebuild',
- *                            'rebuild_p', 'ifa', 'failed_array', 'hotspare',
+ *                            'ifa', 'failed_array', 'hotspare',
  *                            'pfa', 'failure' or 'disk_failed' string.
  *
  * @return Pointer to IBPI state structure if successful, otherwise the function
@@ -389,8 +389,6 @@ static struct ibpi_state *_ibpi_state_get(const char *name)
 		ibpi = IBPI_PATTERN_DEGRADED;
 	} else if (strcmp(name, "rebuild") == 0) {
 		ibpi = IBPI_PATTERN_REBUILD;
-	} else if (strcmp(name, "rebuild_p") == 0) {
-		ibpi = IBPI_PATTERN_REBUILD_P;
 	} else if ((strcmp(name, "ifa") == 0) ||
 		   (strcmp(name, "failed_array") == 0)) {
 		ibpi = IBPI_PATTERN_FAILED_ARRAY;
@@ -429,7 +427,7 @@ static struct ibpi_state *_ibpi_state_get(const char *name)
 		ibpi = SES_REQ_DNR;
 	} else if (strcmp(name, "ses_active") == 0) {
 		ibpi = SES_REQ_ACTIVE;
-	} else if (strcmp(name, "ses_enbale_bb") == 0) {
+	} else if (strcmp(name, "ses_enable_bb") == 0) {
 		ibpi = SES_REQ_EN_BB;
 	} else if (strcmp(name, "ses_enable_ba") == 0) {
 		ibpi = SES_REQ_EN_BA;
@@ -437,30 +435,27 @@ static struct ibpi_state *_ibpi_state_get(const char *name)
 		ibpi = SES_REQ_DEV_OFF;
 	} else if (strcmp(name, "ses_fault") == 0) {
 		ibpi = SES_REQ_FAULT;
+	} else if (strcmp(name, "ses_prdfail") == 0) {
+		ibpi = SES_REQ_PRDFAIL;
 	} else {
 		return NULL;
 	}
-	state = list_first_that(ibpi_list, _ibpi_find, ibpi);
+	state = _ibpi_find(&ibpi_list, ibpi);
 	if (state == NULL)
 		state = _ibpi_state_init(ibpi);
 	return state;
 }
 
-/**
- * This is internal function of ledctl utility. The function checks if the
- * given block device is the one we looking for. This function is design
- * to be used as 'test' parameter for list_first_that() function.
- *
- * @param[in]      block          pointer to block device structure, the
- *                                element on block_list of sysfs structure.
- * @param[in]      path           path to block device in sysfs tree we are
- *                                looking for.
- *
- * @return 1 if the block device is found, otherwise the function returns 0.
- */
-static int _block_device_search(struct block_device *block, const char *path)
+static struct block_device *_block_device_search(const struct list *block_list,
+						 const char *path)
 {
-	return (strcmp(block->sysfs_path, path) == 0);
+	struct block_device *block;
+
+	list_for_each(block_list, block) {
+		if (strcmp(block->sysfs_path, path) == 0)
+			return block;
+	}
+	return NULL;
 }
 
 /**
@@ -482,7 +477,7 @@ static status_t _ibpi_state_add_block(struct ibpi_state *state, char *name)
 {
 	struct stat st;
 	char temp[PATH_MAX], path[PATH_MAX];
-	void *blk1, *blk2;
+	struct block_device *blk1, *blk2;
 
 	if ((realpath(name, temp) == NULL) && (errno != ENOTDIR))
 		return STATUS_INVALID_PATH;
@@ -496,19 +491,17 @@ static status_t _ibpi_state_add_block(struct ibpi_state *state, char *name)
 	} else {
 		str_cpy(path, temp, PATH_MAX);
 	}
-	blk1 = sysfs_block_device_first_that(_block_device_search, path);
+	blk1 = _block_device_search(sysfs_get_block_devices(), path);
 	if (blk1 == NULL) {
 		log_error("%s: device not supported", name);
 		return STATUS_NOT_SUPPORTED;
 	}
-	blk2 = list_first_that(state->block_list, _block_device_search, path);
-	if (blk2 == NULL) {
-		if (list_put(state->block_list, &blk1, sizeof(void *)) == NULL)
-			return STATUS_OUT_OF_MEMORY;
-	} else {
+	blk2 = _block_device_search(&state->block_list, path);
+	if (blk2 == NULL)
+		list_append(&state->block_list, blk1);
+	else
 		log_info("%s: %s: device already on the list.",
 			 ibpi_str[state->ibpi], path);
-	}
 	return STATUS_SUCCESS;
 }
 
@@ -596,11 +589,26 @@ static status_t _cmdline_parse(int argc, char *argv[])
 		case 'l':
 			status = _set_log_path(optarg);
 			break;
+		case 'x':
+			status = STATUS_SUCCESS;
+			listed_only = 1;
+			break;
+		case 'L':
+		{
+			struct cntrl_device *ctrl_dev;
+
+			sysfs_init();
+			sysfs_scan();
+			list_for_each(sysfs_get_cntrl_devices(), ctrl_dev)
+				print_cntrl(ctrl_dev);
+			sysfs_reset();
+			exit(EXIT_SUCCESS);
+		}
 		case ':':
 		case '?':
 		default:
 			log_debug("[opt='%c', opt_index=%d]", opt, opt_index);
-			break;
+			return STATUS_CMDLINE_ERROR;
 		}
 		opt_index = -1;
 		if (status != STATUS_SUCCESS)
@@ -608,26 +616,6 @@ static status_t _cmdline_parse(int argc, char *argv[])
 	} while (1);
 
 	return STATUS_SUCCESS;
-}
-
-/**
- * @brief Sends a LED control message.
- *
- * This is internal function of ledctl utility. The function sends LED control
- * message to controller in order to control LED in enclosure. The pattern to
- * send is stored in block device structure.
- *
- * @param[in]      device         a pointer to block device structure.
- *
- * @return The function does not return a value.
- */
-static void _send_cntrl_message(struct block_device *device)
-{
-	/* turn off all unset LEDs */
-	if (device->ibpi == IBPI_PATTERN_UNKNOWN)
-		device->ibpi = IBPI_PATTERN_NORMAL;
-	device->send_fn(device, device->ibpi);
-	device->flush_fn(device);
 }
 
 /**
@@ -644,11 +632,38 @@ static void _send_cntrl_message(struct block_device *device)
  *
  * @return STATUS_SUCCESS if successful, otherwise a valid status_t status code.
  */
-static status_t _ledctl_execute(void *ibpi_list)
+static status_t _ledctl_execute(struct list *ibpi_list)
 {
+	struct ibpi_state *state;
+	struct block_device *device;
+
 	if (_ibpi_state_determine(ibpi_list) != STATUS_SUCCESS)
 		return STATUS_IBPI_DETERMINE_ERROR;
-	return sysfs_block_device_for_each(_send_cntrl_message);
+
+	if (!listed_only) {
+		list_for_each(sysfs_get_block_devices(), device)
+			device->send_fn(device, IBPI_PATTERN_LOCATE_OFF);
+	}
+
+	list_for_each(ibpi_list, state)
+		list_for_each(&state->block_list, device)
+			device->send_fn(device, device->ibpi);
+
+	list_for_each(sysfs_get_block_devices(), device)
+		device->flush_fn(device);
+
+	return STATUS_SUCCESS;
+}
+
+static status_t _init_ledctl_conf(void)
+{
+	memset(&conf, 0, sizeof(struct ledmon_conf));
+
+	/* initialize with default values */
+	conf.log_level = LOG_LEVEL_WARNING;
+	list_init(&conf.cntrls_whitelist, NULL);
+	list_init(&conf.cntrls_blacklist, NULL);
+	return _set_log_path(LEDCTL_DEF_LOG_FILE);
 }
 
 /**
@@ -676,36 +691,25 @@ int main(int argc, char *argv[])
 	openlog(progname, LOG_PERROR, LOG_USER);
 
 	if (getuid() != 0) {
-		log_error("Only root can run this application.");
+		fprintf(stderr, "Only root can run this application.\n");
 		return STATUS_NOT_A_PRIVILEGED_USER;
 	}
+
+	status = _init_ledctl_conf();
+	if (status != STATUS_SUCCESS)
+		return status;
 	if (on_exit(_ledctl_fini, progname))
 		exit(STATUS_ONEXIT_ERROR);
 	if (_cmdline_parse(argc, argv))
 		exit(STATUS_CMDLINE_ERROR);
-	status = list_init(&ibpi_list);
-	if (status != STATUS_SUCCESS) {
-		log_debug("main(): list_init() failed (status=%s).",
-			  strstatus(status));
-		exit(STATUS_LIST_INIT_ERROR);
-	}
-	status = sysfs_init();
-	if (status != STATUS_SUCCESS) {
-		log_debug("main(): sysfs_init() failed (status=%s).",
-			  strstatus(status));
-		exit(STATUS_SYSFS_INIT_ERROR);
-	}
-	status = sysfs_scan();
-	if (status != STATUS_SUCCESS) {
-		log_debug("main(): sysfs_scan() failed (status=%s).",
-			  strstatus(status));
-		exit(STATUS_SYSFS_SCAN_ERROR);
-	}
+	list_init(&ibpi_list, (item_free_t)ibpi_state_fini);
+	sysfs_init();
+	sysfs_scan();
 	status = _cmdline_ibpi_parse(argc, argv);
 	if (status != STATUS_SUCCESS) {
 		log_debug("main(): _ibpi_parse() failed (status=%s).",
 			  strstatus(status));
 		exit(STATUS_INVALID_STATE);
 	}
-	return _ledctl_execute(ibpi_list);
+	return _ledctl_execute(&ibpi_list);
 }

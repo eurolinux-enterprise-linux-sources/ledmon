@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2016 Intel Corporation.
+ * Copyright (C) 2016-2017 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -61,9 +61,7 @@ struct pci_slot *pci_slot_init(const char *path);
 /**
  * @brief Releases an PCI hotplug slot structure.
  *
- * This function releases memory allocated for PCI hotplug slotstructure. To be
- * more specific it only frees memory allocated for the fields of the structure.
- * It is due to the way list is implemented for the purpose of this utility.
+ * This function releases memory allocated for PCI hotplug slotstructure.
  *
  * @param[in]      slot         Pointer to PCI hotplug slot structure.
  *

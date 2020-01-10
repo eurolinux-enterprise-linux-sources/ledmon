@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,35 +17,32 @@
  *
  */
 
-#include <config.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <limits.h>
 #include <ctype.h>
-#include <string.h>
-#include <fcntl.h>
 #include <dirent.h>
 #include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <stdio.h>
-#include <syslog.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <regex.h>
 #include <stdarg.h>
-#include <time.h>
-#include <sys/time.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <syslog.h>
+#include <time.h>
+#include <unistd.h>
 
 #if _HAVE_DMALLOC_H
 #include <dmalloc.h>
 #endif
 
-#include "status.h"
+#include "config.h"
+#include "config_file.h"
 #include "list.h"
+#include "status.h"
 #include "utils.h"
-
-/**
- */
-#define DEFAULT_LOG_NAME      "/var/log/%s.log"
 
 /**
  */
@@ -56,11 +53,7 @@
 
 /**
  */
-#define TIMESTAMP_PATTERN    "0x%08x:0x%08x "
-
-/**
- */
-enum verbose_level verbose = VERB_WARN;
+#define TIMESTAMP_PATTERN    "%b %d %T "
 
 /**
  * Name of the executable. It is the last section of invocation path.
@@ -132,29 +125,39 @@ int get_int(const char *path, int defval, const char *name)
 
 /**
  */
-void *scan_dir(const char *path)
+int scan_dir(const char *path, struct list *result)
 {
 	struct dirent *dirent;
-	void *result;
-	char temp[PATH_MAX];
-
-	if (list_init(&result) != STATUS_SUCCESS)
-		return NULL;
+	int ret = 0;
 	DIR *dir = opendir(path);
-	if (dir) {
-		while ((dirent = readdir(dir)) != NULL) {
-			if ((strcmp(dirent->d_name, ".") == 0)
-			    || (strcmp(dirent->d_name, "..")) == 0) {
-				continue;
-			}
-			str_cpy(temp, path, PATH_MAX);
-			str_cat(temp, PATH_DELIM_STR, PATH_MAX);
-			str_cat(temp, dirent->d_name, PATH_MAX);
-			list_put(result, temp, strlen(temp) + 1);
+	if (!dir)
+		return -1;
+
+	list_init(result, NULL);
+
+	while ((dirent = readdir(dir)) != NULL) {
+		char *str;
+		size_t len;
+
+		if ((strcmp(dirent->d_name, ".") == 0) ||
+		    (strcmp(dirent->d_name, "..")) == 0)
+			continue;
+
+		len = strlen(path) + strlen(dirent->d_name) + 2;
+		str = malloc(len);
+		if (!str) {
+			ret = -1;
+			list_erase(result);
+			break;
 		}
-		closedir(dir);
+
+		snprintf(str, len, "%s/%s", path, dirent->d_name);
+
+		list_append(result, str);
 	}
-	return result;
+	closedir(dir);
+
+	return ret;
 }
 
 /**
@@ -243,10 +246,16 @@ void get_id(const char *path, struct device_id *did)
  */
 static void _log_timestamp(void)
 {
-	struct timeval t;
-	if (gettimeofday(&t, NULL) == 0) {
-		fprintf(s_log, TIMESTAMP_PATTERN, (int)t.tv_sec,
-			(int)t.tv_usec);
+	time_t timestamp;
+	struct tm *t;
+	char buf[30];
+
+	timestamp = time(NULL);
+	t = localtime(&timestamp);
+
+	if (t) {
+		strftime(buf, sizeof(buf), TIMESTAMP_PATTERN, t);
+		fprintf(s_log, "%s", buf);
 	}
 }
 
@@ -305,22 +314,13 @@ void log_close(void)
 
 /**
  */
-static void _log_open_default(void)
-{
-	char temp[PATH_MAX];
-	sprintf(temp, DEFAULT_LOG_NAME, progname);
-	log_open(temp);
-}
-
-/**
- */
 void log_debug(const char *buf, ...)
 {
 	va_list vl;
 
 	if (s_log == NULL)
-		_log_open_default();
-	if (s_log && (verbose >= VERB_DEBUG)) {
+		log_open(conf.log_path);
+	if (s_log && (conf.log_level >= LOG_LEVEL_DEBUG)) {
 		_log_timestamp();
 		fprintf(s_log, PREFIX_DEBUG);
 		va_start(vl, buf);
@@ -341,8 +341,8 @@ void log_error(const char *buf, ...)
 	va_list vl;
 
 	if (s_log == NULL)
-		_log_open_default();
-	if (s_log && (verbose >= VERB_ERROR)) {
+		log_open(conf.log_path);
+	if (s_log && (conf.log_level >= LOG_LEVEL_ERROR)) {
 		_log_timestamp();
 		fprintf(s_log, PREFIX_ERROR);
 		va_start(vl, buf);
@@ -363,8 +363,8 @@ void log_warning(const char *buf, ...)
 	va_list vl;
 
 	if (s_log == NULL)
-		_log_open_default();
-	if (s_log && (verbose >= VERB_WARN)) {
+		log_open(conf.log_path);
+	if (s_log && (conf.log_level >= LOG_LEVEL_WARNING)) {
 		_log_timestamp();
 		fprintf(s_log, PREFIX_WARNING);
 		va_start(vl, buf);
@@ -385,8 +385,8 @@ void log_info(const char *buf, ...)
 	va_list vl;
 
 	if (s_log == NULL)
-		_log_open_default();
-	if (s_log && (verbose >= VERB_INFO)) {
+		log_open(conf.log_path);
+	if (s_log && (conf.log_level >= LOG_LEVEL_INFO)) {
 		_log_timestamp();
 		fprintf(s_log, PREFIX_INFO);
 		va_start(vl, buf);
@@ -503,4 +503,72 @@ char *truncate_path_component_rev(const char *path, int index)
 	c = strdup(p);
 	free(p);
 	return c;
+}
+
+int match_string(const char *string, const char *pattern)
+{
+	int status;
+	regex_t regex;
+
+	if (!string || !pattern)
+		return 0;
+
+	if (strcmp(string, pattern) == 0)
+		return 1;
+
+	status = regcomp(&regex, pattern, REG_EXTENDED);
+	if (status != 0) {
+		log_debug("regecomp failed, ret=%d", __FUNCTION__, status);
+		return 0;
+	}
+
+	status = regexec(&regex, string, 0, NULL, 0);
+	if (status != 0)
+		return 0;
+
+	return 1;
+}
+
+int get_log_fd(void)
+{
+	return fileno(s_log);
+}
+
+void print_opt(const char *long_opt, const char *short_opt, const char *desc)
+{
+	printf("%-20s%-10s%s\n", long_opt, short_opt, desc);
+}
+
+/**
+ * @brief Sets the path to local log file.
+ *
+ * This function sets the path and
+ * file name of log file. The function checks if the specified path is valid. In
+ * case of incorrect path the function does nothing.
+ *
+ * @param[in]      path           new location and name of log file.
+ *
+ * @return STATUS_SUCCESS if successful, otherwise a valid status_t status code.
+ *         The following status code are returned:
+ *
+ *         STATUS_INVALID_PATH    the given path is invalid.
+ *         STATUS_FILE_OPEN_ERROR unable to open a log file i.e. because of
+ *                                insufficient privileges.
+ */
+status_t set_log_path(const char *path)
+{
+	char temp[PATH_MAX];
+
+	if (realpath(path, temp) == NULL) {
+		if ((errno != ENOENT) && (errno != ENOTDIR))
+			return STATUS_INVALID_PATH;
+	}
+	if (log_open(temp) < 0)
+		return STATUS_FILE_OPEN_ERROR;
+
+	if (conf.log_path)
+		free(conf.log_path);
+	conf.log_path = strdup(temp);
+
+	return STATUS_SUCCESS;
 }

@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -19,8 +19,6 @@
 
 #ifndef _CNTRL_H_INCLUDED_
 #define _CNTRL_H_INCLUDED_
-
-#include "smp.h"
 
 /**
  * This enumeration type lists all supported storage controller types.
@@ -101,14 +99,24 @@ struct cntrl_device *cntrl_device_init(const char *path);
  * @brief Releases a controller device structure.
  *
  * This function releases memory allocated for controller device structure.
- * To be more specific it only frees memory allocated for the fields of the
- * structure. It is due to the way list is implemented for the purpose of this
- * utility.
  *
  * @param[in]     device         pointer to controller device structure.
  *
  * @return The function does not return a value.
  */
 void cntrl_device_fini(struct cntrl_device *device);
+
+/**
+ * @brief Prints given controller to stdout.
+ *
+ * This function prints the path and type of controller device given as
+ * argument.
+ *
+ * @param[in]      ctrl_dev            address to element from a
+ *                                     controller list.
+ *
+ * @return The function does not return a value.
+ */
+void print_cntrl(struct cntrl_device *ctrl_dev);
 
 #endif				/* _CNTRL_H_INCLUDED_ */

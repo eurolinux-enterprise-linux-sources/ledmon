@@ -1,15 +1,15 @@
 Summary: Enclosure LED Utilities
 Name: ledmon
-Version: 0.80
-Release: 2%{?dist}
+Version: 0.90
+Release: 1%{?dist}
 License: GPLv2+
 Group: Applications/System
 URL: http://sourceforge.net/projects/ledmon/
 Source0: http://download.sourceforge.net/%{name}/%{name}-%{version}.tar.gz
 Patch0: ledmon_cflags.patch
-Patch1: ledmon-nvme.patch
 BuildRequires: perl
 BuildRequires: sg3_utils-devel
+BuildRequires: systemd-devel
 Obsoletes: ledctl = 0.1-1
 Provides: ledctl = %{version}-%{release}
 Requires: sg3_utils-libs
@@ -24,7 +24,6 @@ use this application.
 %prep
 %setup -q
 %patch0 -p1 -b .cflags
-%patch1 -p1
 
 %build
 # can't use smp_flags because -j4 makes the build fail
@@ -40,6 +39,9 @@ make install INSTALL="%{__install} -p" DESTDIR=$RPM_BUILD_ROOT SBIN_DIR=$RPM_BUI
 %{_mandir}/*/*
 
 %changelog
+* Wed Jun 13 2018 Jan Synáček <jsynacek@redhat.com> - 0.90-1
+- Update to 0.90 (#1494473)
+
 * Fri May 12 2017 Jan Synáček <jsynacek@redhat.com> - 0.80-2
 - LEDs don't blink during resync/recovery operations on the NVMe RAID volume (#1449990)
 

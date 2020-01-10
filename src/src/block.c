@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,36 +17,32 @@
  *
  */
 
-#include <config.h>
-
+#include <dirent.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <time.h>
-#include <limits.h>
 #include <string.h>
-#include <stdint.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #if _HAVE_DMALLOC_H
 #include <dmalloc.h>
 #endif
 
-#include "status.h"
-#include "ibpi.h"
-#include "utils.h"
-#include "list.h"
-#include "sysfs.h"
-#include "block.h"
-#include "slave.h"
-#include "raid.h"
-#include "cntrl.h"
-#include "scsi.h"
-#include "smp.h"
 #include "ahci.h"
+#include "block.h"
+#include "config.h"
 #include "dellssd.h"
+#include "pci_slot.h"
+#include "raid.h"
+#include "scsi.h"
+#include "slave.h"
+#include "smp.h"
+#include "status.h"
+#include "sysfs.h"
+#include "utils.h"
 #include "vmdssd.h"
 
 /* Global timestamp value. It shell be used to update a timestamp field of block
@@ -110,10 +106,14 @@ static flush_message_t _get_flush_fn(struct cntrl_device *cntrl, const char *pat
 {
 	flush_message_t result = NULL;
 
-	if (cntrl->cntrl_type == CNTRL_TYPE_SCSI && dev_directly_attached(path))
-		result = scsi_smp_write_buffer;
-	else
+	if (cntrl->cntrl_type == CNTRL_TYPE_SCSI) {
+		if (dev_directly_attached(path))
+			result = scsi_smp_write_buffer;
+		else
+			result = scsi_ses_flush;
+	} else {
 		result = do_not_flush;
+	}
 	return result;
 }
 
@@ -145,23 +145,14 @@ static char *_get_host(char *path, struct cntrl_device *cntrl)
 	return result;
 }
 
-/**
- * @brief Checks if block device is connected to the given controller.
- *
- * This is the internal function of 'block device' module. It is design to be
- * used as test argument in list_first_that() function. The function checks if
- * a block device is connected to the given storage controller.
- *
- * @param[in]      cntrl          pointer to controller structure to compare to.
- * @param[in]      path           real path to block device in sysfs.
- *
- * @return 1 if a block device is connected to a controller, otherwise the
- *         function will return 0.
- */
-static int _compare(struct cntrl_device *cntrl, const char *path)
+static int is_dellssd(const struct block_device *bd)
 {
-	return (strncmp(cntrl->sysfs_path, path, strlen(cntrl->sysfs_path)) ==
-		0);
+	return (bd->cntrl && bd->cntrl->cntrl_type == CNTRL_TYPE_DELLSSD);
+}
+
+static int is_vmd(const struct block_device *bd)
+{
+	return ((bd->cntrl && bd->cntrl->cntrl_type == CNTRL_TYPE_VMD));
 }
 
 /**
@@ -177,9 +168,16 @@ static int _compare(struct cntrl_device *cntrl, const char *path)
  *         returns NULL pointer. The NULL pointer means that block devices is
  *         connected to unsupported storage controller.
  */
-struct cntrl_device *block_get_controller(void *cntrl_list, char *path)
+struct cntrl_device *block_get_controller(const struct list *cntrl_list, char *path)
 {
-	return list_first_that(cntrl_list, _compare, path);
+	struct cntrl_device *cntrl;
+
+	list_for_each(cntrl_list, cntrl) {
+		if (strncmp(cntrl->sysfs_path, path,
+			    strlen(cntrl->sysfs_path)) == 0)
+			return cntrl;
+	}
+	return NULL;
 }
 
 struct _host_type *block_get_host(struct cntrl_device *cntrl, int host_id)
@@ -201,37 +199,45 @@ struct _host_type *block_get_host(struct cntrl_device *cntrl, int host_id)
 /*
  * Allocates a new block device structure. See block.h for details.
  */
-struct block_device *block_device_init(void *cntrl_list, const char *path)
+struct block_device *block_device_init(const struct list *cntrl_list, const char *path)
 {
 	struct cntrl_device *cntrl;
-	char link[PATH_MAX], *host;
+	char link[PATH_MAX];
+	char *host = NULL;
 	struct block_device *device = NULL;
+	struct pci_slot *pci_slot = NULL;
 	send_message_t send_fn = NULL;
 	flush_message_t flush_fn = NULL;
 	int host_id = -1;
 	char *host_name;
 
 	if (realpath(path, link)) {
+		pci_slot = vmdssd_find_pci_slot(link);
 		cntrl = block_get_controller(cntrl_list, link);
-		if (cntrl == NULL)
+		if (cntrl != NULL) {
+			if (cntrl->cntrl_type == CNTRL_TYPE_VMD && !pci_slot)
+				return NULL;
+			host = _get_host(link, cntrl);
+			if (host == NULL)
+				return NULL;
+			host_name = get_path_hostN(link);
+			if (host_name) {
+				sscanf(host_name, "host%d", &host_id);
+				free(host_name);
+			}
+			flush_fn = _get_flush_fn(cntrl, link);
+			send_fn = _get_send_fn(cntrl, link);
+			if (send_fn  == NULL) {
+				free(host);
+				return NULL;
+			}
+		} else {
 			return NULL;
-		host = _get_host(link, cntrl);
-		if (host == NULL)
-			return NULL;
-		host_name = get_path_hostN(link);
-		if (host_name) {
-			sscanf(host_name, "host%d", &host_id);
-			free(host_name);
 		}
-		flush_fn = _get_flush_fn(cntrl, link);
-		send_fn = _get_send_fn(cntrl, link);
-		if (send_fn  == NULL) {
-			free(host);
-			return NULL;
-		}
+
 		device = calloc(1, sizeof(*device));
 		if (device) {
-			struct _host_type *hosts = cntrl->hosts;
+			struct _host_type *hosts = cntrl ? cntrl->hosts : NULL;
 
 			device->cntrl = cntrl;
 			device->sysfs_path = strdup(link);
@@ -244,6 +250,7 @@ struct block_device *block_device_init(void *cntrl_list, const char *path)
 			device->host = NULL;
 			device->host_id = host_id;
 			device->encl_index = -1;
+			device->raid_dev = NULL;
 			while (hosts) {
 				if (hosts->host_id == host_id) {
 					device->host = hosts;
@@ -251,7 +258,7 @@ struct block_device *block_device_init(void *cntrl_list, const char *path)
 				}
 				hosts = hosts->next;
 			}
-			if (cntrl->cntrl_type == CNTRL_TYPE_SCSI) {
+			if (cntrl && cntrl->cntrl_type == CNTRL_TYPE_SCSI) {
 				device->phy_index = cntrl_init_smp(link, cntrl);
 				if (!dev_directly_attached(link)
 						&& !scsi_get_enclosure(device)) {
@@ -263,8 +270,9 @@ struct block_device *block_device_init(void *cntrl_list, const char *path)
 					device = NULL;
 				}
 			}
-		} else
+		} else if (host) {
 			free(host);
+		}
 	}
 	return device;
 }
@@ -281,7 +289,10 @@ void block_device_fini(struct block_device *device)
 		if (device->cntrl_path)
 			free(device->cntrl_path);
 
-		/* free(device); */
+		if (device->raid_dev)
+			raid_device_fini(device->raid_dev);
+
+		free(device);
 	}
 }
 
@@ -310,8 +321,78 @@ struct block_device *block_device_duplicate(struct block_device *block)
 			result->host_id = block->host_id;
 			result->phy_index = block->phy_index;
 			result->encl_index = block->encl_index;
-			strcpy(result->encl_dev, block->encl_dev);
+			result->enclosure = block->enclosure;
+			result->raid_dev =
+				raid_device_duplicate(block->raid_dev);
 		}
 	}
 	return result;
+}
+
+int block_compare(const struct block_device *bd_old,
+		  const struct block_device *bd_new)
+{
+	int i = 0;
+
+	if (!is_dellssd(bd_old) && !is_vmd(bd_old) && bd_old->host_id == -1) {
+		log_debug("Device %s : No host_id!",
+			  strstr(bd_old->sysfs_path, "host"));
+		return 0;
+	}
+	if (!is_dellssd(bd_new) && !is_vmd(bd_new) && bd_new->host_id == -1) {
+		log_debug("Device %s : No host_id!",
+			  strstr(bd_new->sysfs_path, "host"));
+		return 0;
+	}
+
+	if (bd_old->cntrl->cntrl_type != bd_new->cntrl->cntrl_type)
+		return 0;
+
+	switch (bd_old->cntrl->cntrl_type) {
+	case CNTRL_TYPE_AHCI:
+		/* Missing support for port multipliers. Compare just hostX. */
+		i = (bd_old->host_id == bd_new->host_id);
+		break;
+
+	case CNTRL_TYPE_SCSI:
+		/* Host and phy is not enough. They might be DA or EA. */
+		if (dev_directly_attached(bd_old->sysfs_path) &&
+		    dev_directly_attached(bd_new->sysfs_path)) {
+			/* Just compare host & phy */
+			i = (bd_old->host_id == bd_new->host_id) &&
+			    (bd_old->phy_index == bd_new->phy_index);
+			break;
+		}
+		if (!dev_directly_attached(bd_old->sysfs_path) &&
+		    !dev_directly_attached(bd_new->sysfs_path)) {
+			/* Both expander attached */
+			i = (bd_old->host_id == bd_new->host_id) &&
+			    (bd_old->phy_index == bd_new->phy_index);
+			i = i && (bd_old->enclosure == bd_new->enclosure);
+			i = i && (bd_old->encl_index == bd_new->encl_index);
+			break;
+		}
+		/* */
+		break;
+
+	case CNTRL_TYPE_VMD:
+		/* compare names and address of the drive */
+		i = (strcmp(bd_old->sysfs_path, bd_new->sysfs_path) == 0);
+		if (!i) {
+			struct pci_slot *old_slot, *new_slot;
+
+			old_slot = vmdssd_find_pci_slot(bd_old->sysfs_path);
+			new_slot = vmdssd_find_pci_slot(bd_new->sysfs_path);
+			if (old_slot && new_slot)
+				i = (strcmp(old_slot->address, new_slot->address) == 0);
+		}
+		break;
+
+	case CNTRL_TYPE_DELLSSD:
+	default:
+		/* Just compare names */
+		i = (strcmp(bd_old->sysfs_path, bd_new->sysfs_path) == 0);
+		break;
+	}
+	return i;
 }

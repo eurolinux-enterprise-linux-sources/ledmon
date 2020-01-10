@@ -1,6 +1,6 @@
 #
 #  Intel(R) Enclosure LED Utilities
-#  Copyright (C) 2009-2016 Intel Corporation.
+#  Copyright (C) 2009-2017 Intel Corporation.
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms and conditions of the GNU General Public License,
@@ -80,7 +80,7 @@ Turns only Status LED and Failure LED off.
 
 Visualizes "In a Critical Array" pattern.
 
-=item B<rebuild> or B<rebuild_p>
+=item B<rebuild>
 
 Visualizes "Rebuild" pattern.
 
@@ -156,7 +156,7 @@ SES-2 DO NOT REMOVE
 
 SES-2 ACTIVE
 
-=item B<ses_enbale_bb>
+=item B<ses_enable_bb>
 
 SES-2 ENABLE BYP B
 
@@ -171,6 +171,10 @@ SES-2 DEVICE OFF
 =item B<ses_fault>
 
 SES-2 FAULT
+
+=item B<ses_prdfail>
+
+SES-2 PRDFAIL
 
 =back
 
@@ -189,29 +193,21 @@ I<locate> is translated to I<ses_ident>
 
 I<locate_off> is translated to I<~ses_ident>
 
-=item B<normal>
+=item B<normal> or B<off>
 
-I<normal> is translated to I<ses_ok>
+I<normal> or I<off> is translated to I<ses_ok>
 
-=item B<off>
+=item B<ica> or B<degraded>
 
-I<off> is translated to I<ses_ok>
-
-=item B<degraded>
-
-I<degraded> is translated to I<ses_ica>
+I<ica> or I<degraded> is translated to I<ses_ica>
 
 =item B<rebuild>
 
 I<rebuild> is translated to I<ses_rebuild>
 
-=item B<rebuild_p>
+=item B<ifa> or B<failed_array>
 
-I<rebuild_p> is translated to I<ses_rebuild>
-
-=item B<failed>
-
-I<failed> is translated to I<ses_ifa>
+I<ifa> or I<failed_array> is translated to I<ses_ifa>
 
 =item B<hotspare>
 
@@ -219,15 +215,11 @@ I<hotspare> is translated to I<ses_hotspare>
 
 =item B<pfa>
 
-I<pfa> is translated to I<ses_rsvd_dev>
+I<pfa> is translated to I<ses_prdfail>
 
-=item B<failure>
+=item B<failure> or B<disk_failed>
 
-I<failure> is translated to I<ses_fault>
-
-=item B<disk_failed>
-
-I<disk_failed> is translated to I<ses_fault>
+I<failure> or I<disk_failed> is translated to I<ses_fault>
 
 =back
 
@@ -244,16 +236,12 @@ In case of a RAID device or a container device a state will be set for all
 block devices associated, respectively.
 
 The LEDs of devices listed in I<list_of_devices> are set to the given
-pattern I<pattern_name> and all other LEDs are turned off.
+pattern I<pattern_name> and all other LEDs are turned off (unless --listed-only
+option is given).
 
 =head1 OPTIONS
 
 =over 8
-
-=item B<-c> or B<--config>=I<path>
-
-Sets a path to local configuration file. If this option is specified the
-global configuration file and user configuration file has no effect.
 
 =item B<-l> or B<--log>=I<path>
 
@@ -268,6 +256,16 @@ Prints this text out and exits.
 
 Displays version of ledctl and information about the license and exits.
 
+=item B<-L> or B<--list-controllers>
+
+Prints information (system path and type) of all controllers detected by
+ledmon and exits.
+
+=item B<-x> or B<--listed-only>
+
+With this option ledctl will change state only on devices listed in CLI. The
+rest of devices will not be touched.
+
 =back
 
 =head1 FILES
@@ -278,16 +276,6 @@ Displays version of ledctl and information about the license and exits.
 
 Global log file, used by all instances of ledctl application. To force logging
 to user defined file use I<-l> option switch.
-
-=item F<~/.ledctl>
-
-User configuration file, shared between ledmon and all ledctl application
-instances.
-
-=item F</etc/ledcfg.conf>
-
-Global configuration file, shared between ledmon and all ledctl application
-instances.
 
 =back
 
@@ -319,7 +307,7 @@ example uses the first format of device list.
 
 =head1 LICENSE
 
-Copyright (c) 2009-2016 Intel Corporation.
+Copyright (c) 2009-2017 Intel Corporation.
 
 This program is distributed under the terms of the GNU General Public License
 as published by the Free Software Foundation. See the built-in help for
@@ -327,7 +315,7 @@ details on the License and the lack of warranty.
 
 =head1 SEE ALSO
 
-ledmon(8), ledctl.conf(5)
+ledmon(8), ledmon.conf(5)
 
 =head1 AUTHOR
 

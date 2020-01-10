@@ -1,6 +1,6 @@
 #
 #  Intel(R) Enclosure LED Utilities
-#  Copyright (C) 2009-2016 Intel Corporation.
+#  Copyright (C) 2009-2017 Intel Corporation.
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms and conditions of the GNU General Public License,
@@ -33,6 +33,7 @@ OBJECTS=\
 	$(OUTDIR)/ahci.o	\
 	$(OUTDIR)/block.o	\
 	$(OUTDIR)/cntrl.o	\
+	$(OUTDIR)/config_file.o	\
 	$(OUTDIR)/enclosure.o	\
 	$(OUTDIR)/list.o	\
 	$(OUTDIR)/raid.o	\
@@ -44,7 +45,8 @@ OBJECTS=\
 	$(OUTDIR)/dellssd.o	\
 	$(OUTDIR)/utils.o	\
 	$(OUTDIR)/pci_slot.o	\
-	$(OUTDIR)/vmdssd.o
+        $(OUTDIR)/vmdssd.o      \
+        $(OUTDIR)/udev.o
 
 # Build components of ledmon application.
 LEDMON_OBJECTS=\
@@ -57,26 +59,39 @@ LEDCTL_OBJECTS=\
 	$(OUTDIR)/ledctl.o	\
 	$(OBJECTS)
 
-CXFLAGS=-O0 -g
+TEST_CONFIG_OBJECTS=\
+	$(OUTDIR)/config_file.o	\
+	$(OUTDIR)/list.o	\
+	$(OUTDIR)/utils.o
+
+CXFLAGS=-O0 -g -std=gnu99
 CWFLAGS=-Wall
 CFLAGS=$(CXFLAGS) $(CWFLAGS)
 
-DEFFLAGS=-D_DEBUG -D_GNU_SOURCE -D_BSD_SOURCE -DDMALLOC_DISABLE
+DEFFLAGS=-D_DEBUG -D_GNU_SOURCE -D_DEFAULT_SOURCE -DDMALLOC_DISABLE
 CPPFLAGS=$(DEFFLAGS)
 ALL_CPPFLAGS=$(CPPFLAGS) -I../config
 
 LDFLAGS=$(CXFLAGS)
-LDLIBS=-lsgutils2
+LDLIBS=-lsgutils2 -ludev
 
 SOURCES:=$(shell find -name "*.[cC]" -print)
 
 default: all
 
+ifdef DEBUG_IBPI
+CPPFLAGS += -DDEBUG_IBPI
+endif
+
 ledmon: $(OUTDIR)/.depend $(LEDMON_OBJECTS)
-	$(CC) $(LDFLAGS) $(LDLIBS) $(LEDMON_OBJECTS) -o $@
+	$(CC) $(LDFLAGS) $(LEDMON_OBJECTS) $(LDLIBS) -o $@
 
 ledctl: $(OUTDIR)/.depend $(LEDCTL_OBJECTS)
-	$(CC) $(LDFLAGS) $(LDLIBS) $(LEDCTL_OBJECTS) -o $@
+	$(CC) $(LDFLAGS) $(LEDCTL_OBJECTS) $(LDLIBS) -o $@
+
+test_config: ALL_CPPFLAGS += -D_TEST_CONFIG
+test_config: $(OUTDIR)/.depend $(TEST_CONFIG_OBJECTS)
+	$(CC) $(LDFLAGS) $(TEST_CONFIG_OBJECTS) $(LDLIBS) -o $@
 
 $(OUTDIR)/%.o: %.c
 	$(CC) $(CFLAGS) $(ALL_CPPFLAGS) -c $< -o $@

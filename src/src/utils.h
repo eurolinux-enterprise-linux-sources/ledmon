@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -20,6 +20,11 @@
 #ifndef _UTILS_H_INCLUDED_
 #define _UTILS_H_INCLUDED_
 
+#include "stdlib.h"
+#include "stdint.h"
+#include "list.h"
+#include "status.h"
+
 /**
  * Maximum number of bytes in temporary buffer. It is used for local variables.
  */
@@ -30,23 +35,6 @@
  * function needs to write a sysfs attribute.
  */
 #define WRITE_BUFFER_SIZE   1024
-
-/**
- * Verbose level for messages out from application.
- */
-enum verbose_level {
-	VERB_QUIET = 0,
-	VERB_ERROR,
-	VERB_WARN,
-	VERB_INFO,
-	VERB_DEBUG,
-	VERB_ALL
-};
-
-/**
- * Global variable indicates current level of verbosity.
- */
-extern enum verbose_level verbose;
 
 /**
  * This structure describes a device identifier. It consists of major and minor
@@ -164,12 +152,16 @@ int put_int(const char *path, const char *name, int value);
  * file on a list. The function puts a canonical paths on the list, however it
  * does not resolve any symbolic link.
  *
- * @param[in]      path           Path to directory to read.
+ * This function allocates memory for the list elements. The caller should free
+ * it using list_erase().
  *
- * @return List containing content of the given directory. Each element on the
- *         list is canonical path.
+ * @param[in]      path           Path to directory to read.
+ * @param[in]      result         Pointer to list where the directory contents
+ *                                will be put.
+ *
+ * @return 0 on success, -1 on error.
  */
-void *scan_dir(const char *path);
+int scan_dir(const char *path, struct list *result);
 
 /**
  * @brief Writes a text to file.
@@ -353,5 +345,19 @@ char *get_path_component_rev(const char *path, int index);
  * @brief Extracts the 'hostX' part from path.
  */
 char *get_path_hostN(const char *path);
+
+int match_string(const char *string, const char *pattern);
+
+/**
+ */
+int get_log_fd(void);
+
+/**
+ */
+void print_opt(const char *long_opt, const char *short_opt, const char *desc);
+
+/**
+ */
+status_t set_log_path(const char *path);
 
 #endif				/* _UTILS_H_INCLUDED_ */

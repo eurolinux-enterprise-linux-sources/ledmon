@@ -1,6 +1,6 @@
 #
 #  Intel(R) Enclosure LED Utilities
-#  Copyright (C) 2009-2016 Intel Corporation.
+#  Copyright (C) 2009-2017 Intel Corporation.
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms and conditions of the GNU General Public License,
@@ -22,14 +22,14 @@ MAN_INSTDIR=$(DESTDIR)/usr/share/man
 MAN8_INSTDIR=$(MAN_INSTDIR)/man8
 MAN5_INSTDIR=$(MAN_INSTDIR)/man5
 
-RELEASE_DATE?="November 2016"
-RELEASE_VER?=0.80
+RELEASE_DATE?="February 2018"
+RELEASE_VER?=0.90
 
 default: all
 
-ledctl.conf.5.gz: ledctl.conf.pod
-	pod2man -r "LEDCTL.CONF Version $(RELEASE_VER)" -d $(RELEASE_DATE) \
-		-s 5 -n ledctl.conf -c "Inter(R) Enclosure LED Utilities Config" $< | gzip -9f > $@
+ledmon.conf.5.gz: ledmon.conf.pod
+	pod2man -r "LEDMON.CONF Version $(RELEASE_VER)" -d $(RELEASE_DATE) \
+		-s 5 -n ledmon.conf -c "Intel(R) Enclosure LED Utilities Config" $< | gzip -9f > $@
 
 ledmon.8.gz: ledmon.pod
 	pod2man -r "LEDMON Version $(RELEASE_VER)" -d $(RELEASE_DATE) \
@@ -42,14 +42,14 @@ ledctl.8.gz: ledctl.pod
 install: all
 	install -D -m 644 ./ledmon.8.gz $(MAN8_INSTDIR)/ledmon.8.gz
 	install -D -m 644 ./ledctl.8.gz $(MAN8_INSTDIR)/ledctl.8.gz
-	install -D -m 644 ./ledctl.conf.5.gz $(MAN5_INSTDIR)/ledctl.conf.5.gz
+	install -D -m 644 ./ledmon.conf.5.gz $(MAN5_INSTDIR)/ledmon.conf.5.gz
 
 uninstall:
 	rm -f $(MAN8_INSTDIR)/ledmon.8.gz $(MAN8_INSTDIR)/ledctl.8.gz
-	rm -f $(MAN5_INSTDIR)/ledctl.conf.5.gz
+	rm -f $(MAN5_INSTDIR)/ledmon.conf.5.gz
 
-all: ledctl.conf.5.gz ledmon.8.gz ledctl.8.gz
+all: ledmon.conf.5.gz ledmon.8.gz ledctl.8.gz
 
 clean:
 	rm -f ledmon.8 ledmon.8.gz ledctl.8 ledctl.8.gz
-	rm -f ledctl.conf.5 ledctl.conf.5.gz
+	rm -f ledmon.conf.5 ledmon.conf.5.gz

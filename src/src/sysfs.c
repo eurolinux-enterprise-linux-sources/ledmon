@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,31 +17,32 @@
  *
  */
 
-#include <config.h>
 
-#include <stdlib.h>
-#include <unistd.h>
-#include <limits.h>
 #include <fcntl.h>
-#include <string.h>
+#include <limits.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #if _HAVE_DMALLOC_H
 #include <dmalloc.h>
 #endif
 
-#include "status.h"
+#include "block.h"
+#include "cntrl.h"
+#include "config.h"
+#include "config_file.h"
+#include "enclosure.h"
 #include "ibpi.h"
 #include "list.h"
-#include "utils.h"
-#include "sysfs.h"
-#include "block.h"
-#include "slave.h"
-#include "raid.h"
-#include "enclosure.h"
-#include "cntrl.h"
 #include "pci_slot.h"
+#include "raid.h"
+#include "slave.h"
+#include "stdio.h"
+#include "sysfs.h"
+#include "utils.h"
 
 /**
  */
@@ -51,71 +52,59 @@
 #define SYSFS_PCI_SLOTS         "/sys/bus/pci/slots"
 
 /**
- * This is internal variable global to sysfs module only. The variable holds
- * pointer to list of block devices registered in the system. Use sysfs_init()
+ * This is internal variable global to sysfs module only. It is a list of
+ * block devices registered in the system. Use sysfs_init()
  * function to initialize the variable. Use sysfs_scan() function to populate
  * the list. Use sysfs_reset() function to delete the content of the list.
- * Use sysfs_fini() function to delete the content of the list and release
- * memory allocated for the list.
  */
-static void *sysfs_block_list = NULL;
+static struct list sysfs_block_list;
 
 /**
- * This is internal variable global to sysfs module only. The variable holds
- * pointer to list of RAID volumes registered in the system. Use sysfs_init()
+ * This is internal variable global to sysfs module only. It is a list of
+ * RAID volumes registered in the system. Use sysfs_init()
  * function to initialize the variable. Use sysfs_scan() function to populate
  * the list. Use sysfs_reset() function to delete the content of the list.
- * Use sysfs_fini() function to delete the content of the list and release
- * memory allocated for the list.
  */
-static void *volum_list = NULL;
+static struct list volum_list;
 
 /**
- * This is internal variable global to sysfs module only. The variable holds
- * pointer to list of storage controller devices registered in the system and
+ * This is internal variable global to sysfs module only. It is a list of
+ * storage controller devices registered in the system and
  * supported by Intel(R) Enclosure LEDs Control Utility. Use sysfs_init()
  * function to initialize the variable. Use sysfs_scan() function to populate
  * the list. Use sysfs_reset() function to delete the content of the list.
- * Use sysfs_fini() function to delete the content of the list and release
- * memory allocated for the list.
  */
-static void *cntrl_list = NULL;
+static struct list cntrl_list;
 
 /**
- * This is internal variable global to sysfs module only. The variable holds
- * pointer to list of slave devices registered in the system. Use sysfs_init()
+ * This is internal variable global to sysfs module only. It is a list of
+ * slave devices registered in the system. Use sysfs_init()
  * function to initialize the variable. Use sysfs_scan() function to populate
  * the list. Use sysfs_reset() function to delete the content of the list.
- * Use sysfs_fini() function to delete the content of the list and release
- * memory allocated for the list.
  */
-static void *slave_list = NULL;
+static struct list slave_list;
 
 /**
- * This is internal variable global to sysfs module only. The variable holds
- * pointer to list of RAID containers registered in the system. Use sysfs_init()
+ * This is internal variable global to sysfs module only. It is a list of
+ * RAID containers registered in the system. Use sysfs_init()
  * function to initialize the variable. Use sysfs_scan() function to populate
  * the list. Use sysfs_reset() function to delete the content of the list.
- * Use sysfs_fini() function to delete the content of the list and release
- * memory allocated for the list.
  */
-static void *cntnr_list = NULL;
+static struct list cntnr_list;
 
 /**
- * This is internal variable global to sysfs module only. The variable holds the
- * pointer to list of enclosures registered in the system.
+ * This is internal variable global to sysfs module only. It is a to list of
+ * enclosures registered in the system.
  */
-static void *enclo_list = NULL;
+static struct list enclo_list;
 
 /**
- * This is internal variable global to sysfs module only. The variable holds
- * pointer to list of PCI slots registered in the system. Use sysfs_init()
+ * This is internal variable global to sysfs module only. It is a list of
+ * PCI slots registered in the system. Use sysfs_init()
  * function to initialize the variable. Use sysfs_scan() function to populate
  * the list. Use sysfs_reset() function to delete the content of the list.
- * Use sysfs_fini() function to delete the content of the list and release
- * memory allocated for the list.
  */
-static void *slots_list = NULL;
+static struct list slots_list;
 
 /**
  * @brief Determine device type.
@@ -192,31 +181,12 @@ static void _slave_vol_add(const char *path, struct raid_device *raid)
 
 	char *t = rindex(path, '/');
 	if (strncmp(t + 1, "dev-", 4) == 0) {
-		device = slave_device_init(path, sysfs_block_list);
+		device = slave_device_init(path, &sysfs_block_list);
 		if (device) {
 			device->raid = raid;
-			list_put(slave_list, device,
-				 sizeof(struct slave_device));
-			free(device);
+			list_append(&slave_list, device);
 		}
 	}
-}
-
-/**
- * @brief Matches two slave devices.
- *
- * This is internal function of sysfs module. The function compares two slave
- * devices together. Slave device is identical to other slave device if both if
- * both devices are associated with the same block device.
- *
- * @param[in]      s1             Pointer to slave device to compare with.
- * @param[in]      s2             Pointer to slave to compare to.
- *
- * @return 1 if slave devices matches, otherwise the function returns 0.
- */
-static int _match(struct slave_device *s1, struct slave_device *s2)
-{
-	return (s1->block == s2->block);
 }
 
 /**
@@ -232,7 +202,36 @@ static int _match(struct slave_device *s1, struct slave_device *s2)
  */
 static int _is_duplicate(struct slave_device *slave)
 {
-	return (list_first_that(slave_list, _match, slave) != NULL);
+	struct slave_device *device;
+
+	list_for_each(&slave_list, device) {
+		if (device->block == slave->block)
+			return 1;
+	}
+	return 0;
+}
+
+/**
+ * @brief Checks if given disk can be removed from sysfs_block_list if
+ * metatada is not present.
+ *
+ * This is internal function (action) of sysfs module. The slave_list keeps
+ * all devices with metadata (raid devices). If disk is not included in slave
+ * list there is not metadata on it.
+ *
+ * @return 1 if can be removed, otherwise 0.
+ */
+static int _is_non_raid_device(struct block_device *block_device)
+{
+	struct slave_device *slave_device;
+
+	list_for_each(&slave_list, slave_device) {
+		if (strcmp(slave_device->block->sysfs_path,
+			   block_device->sysfs_path) == 0)
+			return 0;
+	}
+
+	return 1;
 }
 
 /**
@@ -243,49 +242,36 @@ static void _slave_cnt_add(const char *path, struct raid_device *raid)
 
 	char *t = rindex(path, '/');
 	if (strncmp(t + 1, "dev-", 4) == 0) {
-		device = slave_device_init(path, sysfs_block_list);
+		device = slave_device_init(path, &sysfs_block_list);
 		if (device) {
 			if (!_is_duplicate(device)) {
 				device->raid = raid;
-				list_put(slave_list, device,
-					 sizeof(struct slave_device));
+				list_append(&slave_list, device);
 			} else {
 				slave_device_fini(device);
 			}
-			free(device);
 		}
 	}
 }
 
-/**
- */
-static void _link_volum(struct raid_device *device)
+static void _link_raid_device(struct raid_device *device, enum device_type type)
 {
 	char temp[PATH_MAX];
+	struct list dir;
 
 	str_cpy(temp, device->sysfs_path, PATH_MAX);
-	str_cat(temp, "/md", PATH_MAX);
+	str_cat(temp, "/md", PATH_MAX - 1);
 
-	void *dir = scan_dir(temp);
-	if (dir) {
-		list_for_each_parm(dir, _slave_vol_add, device);
-		list_fini(dir);
-	}
-}
+	if (scan_dir(temp, &dir) == 0) {
+		const char *dir_path;
 
-/**
- */
-static void _link_cntnr(struct raid_device *device)
-{
-	char temp[PATH_MAX];
-
-	str_cpy(temp, device->sysfs_path, PATH_MAX);
-	str_cat(temp, "/md", PATH_MAX);
-
-	void *dir = scan_dir(temp);
-	if (dir) {
-		list_for_each_parm(dir, _slave_cnt_add, device);
-		list_fini(dir);
+		list_for_each(&dir, dir_path) {
+			if (type == DEVICE_TYPE_VOLUME)
+				_slave_vol_add(dir_path, device);
+			else if (type == DEVICE_TYPE_CONTAINER)
+				_slave_cnt_add(dir_path, device);
+		}
+		list_erase(&dir);
 	}
 }
 
@@ -293,34 +279,29 @@ static void _link_cntnr(struct raid_device *device)
  */
 static void _block_add(const char *path)
 {
-	void *device = block_device_init(cntrl_list, path);
-	if (device) {
-		list_put(sysfs_block_list, device, sizeof(struct block_device));
-		free(device);
-	}
+	struct block_device *device = block_device_init(&cntrl_list, path);
+	if (device)
+		list_append(&sysfs_block_list, device);
 }
 
 /**
  */
 static void _volum_add(const char *path, unsigned int device_num)
 {
-	void *device = raid_device_init(path, device_num, DEVICE_TYPE_VOLUME);
-	if (device) {
-		list_put(volum_list, device, sizeof(struct raid_device));
-		free(device);
-	}
+	struct raid_device *device =
+	    raid_device_init(path, device_num, DEVICE_TYPE_VOLUME);
+	if (device)
+		list_append(&volum_list, device);
 }
 
 /**
  */
 static void _cntnr_add(const char *path, unsigned int device_num)
 {
-	void *device =
+	struct raid_device *device =
 	    raid_device_init(path, device_num, DEVICE_TYPE_CONTAINER);
-	if (device) {
-		list_put(cntnr_list, device, sizeof(struct raid_device));
-		free(device);
-	}
+	if (device)
+		list_append(&cntnr_list, device);
 }
 
 /**
@@ -348,33 +329,27 @@ static void _raid_add(const char *path)
  */
 static void _cntrl_add(const char *path)
 {
-	void *device = cntrl_device_init(path);
-	if (device) {
-		list_put(cntrl_list, device, sizeof(struct cntrl_device));
-		free(device);
-	}
+	struct cntrl_device *device = cntrl_device_init(path);
+	if (device)
+		list_append(&cntrl_list, device);
 }
 
 /**
  */
 static void _enclo_add(const char *path)
 {
-	void *device = enclosure_device_init(path);
-	if (device) {
-		list_put(enclo_list, device, sizeof(struct enclosure_device));
-		free(device);
-	}
+	struct enclosure_device *device = enclosure_device_init(path);
+	if (device)
+		list_append(&enclo_list, device);
 }
 
 /**
  */
 static void _slots_add(const char *path)
 {
-	void *device = pci_slot_init(path);
-	if (device) {
-		list_put(slots_list, device, sizeof(struct pci_slot));
-		free(device);
-	}
+	struct pci_slot *device = pci_slot_init(path);
+	if (device)
+		list_append(&slots_list, device);
 }
 
 /**
@@ -404,80 +379,82 @@ static void _check_enclo(const char *path)
 		_enclo_add(link);
 }
 
-/**
- */
-static void _check_slots(const char *path)
+static void _scan_block(void)
 {
-	_slots_add(path);
-}
+	struct list dir;
+	if (scan_dir(SYSFS_CLASS_BLOCK, &dir) == 0) {
+		const char *dir_path;
 
-/**
- */
-static status_t _scan_block(void)
-{
-	void *dir = scan_dir(SYSFS_CLASS_BLOCK);
-	if (dir) {
-		list_for_each(dir, _block_add);
-		list_fini(dir);
+		list_for_each(&dir, dir_path)
+			_block_add(dir_path);
+		list_erase(&dir);
 	}
-	return STATUS_SUCCESS;
 }
 
-/**
- */
-static status_t _scan_raid(void)
+static void _scan_raid(void)
 {
-	void *dir = scan_dir(SYSFS_CLASS_BLOCK);
-	if (dir) {
-		list_for_each(dir, _check_raid);
-		list_fini(dir);
+	struct list dir;
+	if (scan_dir(SYSFS_CLASS_BLOCK, &dir) == 0) {
+		const char *dir_path;
+
+		list_for_each(&dir, dir_path)
+			_check_raid(dir_path);
+		list_erase(&dir);
 	}
-	return STATUS_SUCCESS;
 }
 
-/**
- */
-static status_t _scan_cntrl(void)
+static void _scan_cntrl(void)
 {
-	void *dir = scan_dir(SYSFS_PCI_DEVICES);
-	if (dir) {
-		list_for_each(dir, _check_cntrl);
-		list_fini(dir);
+	struct list dir;
+	if (scan_dir(SYSFS_PCI_DEVICES, &dir) == 0) {
+		const char *dir_path;
+
+		list_for_each(&dir, dir_path)
+			_check_cntrl(dir_path);
+		list_erase(&dir);
 	}
-	return STATUS_SUCCESS;
 }
 
-/**
- */
-static status_t _scan_slave(void)
+static void _scan_slave(void)
 {
-	list_for_each(volum_list, _link_volum);
-	list_for_each(cntnr_list, _link_cntnr);
-	return STATUS_SUCCESS;
-}
+	struct raid_device *device;
 
-/**
- */
-static status_t _scan_enclo(void)
-{
-	void *dir = scan_dir(SYSFS_CLASS_ENCLOSURE);
-	if (dir) {
-		list_for_each(dir, _check_enclo);
-		list_fini(dir);
+	list_for_each(&volum_list, device)
+		_link_raid_device(device, DEVICE_TYPE_VOLUME);
+	list_for_each(&cntnr_list, device)
+		_link_raid_device(device, DEVICE_TYPE_CONTAINER);
+	if (conf.raid_memebers_only) {
+		struct node *node;
+
+		list_for_each_node(&sysfs_block_list, node) {
+			if (_is_non_raid_device(node->item))
+				list_delete(node);
+		}
 	}
-	return STATUS_SUCCESS;
 }
 
-/**
- */
-static status_t _scan_slots(void)
+static void _scan_enclo(void)
 {
-	void *dir = scan_dir(SYSFS_PCI_SLOTS);
-	if (dir) {
-		list_for_each(dir, _check_slots);
-		list_fini(dir);
+	struct list dir;
+	if (scan_dir(SYSFS_CLASS_ENCLOSURE, &dir) == 0) {
+		const char *dir_path;
+
+		list_for_each(&dir, dir_path)
+			_check_enclo(dir_path);
+		list_erase(&dir);
 	}
-	return STATUS_SUCCESS;
+}
+
+static void _scan_slots(void)
+{
+	struct list dir;
+	if (scan_dir(SYSFS_PCI_SLOTS, &dir) == 0) {
+		const char *dir_path;
+
+		list_for_each(&dir, dir_path)
+			_slots_add(dir_path);
+		list_erase(&dir);
+	}
 }
 
 /**
@@ -528,15 +505,19 @@ static void _set_array_state(struct raid_device *raid,
 	case RAID_ACTION_FROZEN:
 		_set_block_state(block, IBPI_PATTERN_NORMAL);
 		break;
-	case RAID_ACTION_CHECK:
 	case RAID_ACTION_RESHAPE:
-		_set_block_state(block, IBPI_PATTERN_REBUILD_P);
+		if (conf.blink_on_migration)
+			_set_block_state(block, IBPI_PATTERN_REBUILD);
 		break;
+	case RAID_ACTION_CHECK:
 	case RAID_ACTION_RESYNC:
 	case RAID_ACTION_REPAIR:
-		_set_block_state(block, IBPI_PATTERN_REBUILD);
+		if (conf.blink_on_init)
+			_set_block_state(block, IBPI_PATTERN_REBUILD);
 		break;
 	case RAID_ACTION_RECOVER:
+		if (conf.rebuild_blink_on_all)
+			_set_block_state(block, IBPI_PATTERN_REBUILD);
 		break;
 	}
 }
@@ -545,16 +526,27 @@ static void _set_array_state(struct raid_device *raid,
  */
 static void _determine(struct slave_device *device)
 {
-	if ((device->
+	if (!device->block->raid_dev ||
+	     (device->block->raid_dev->type == DEVICE_TYPE_CONTAINER &&
+	      device->raid->type == DEVICE_TYPE_VOLUME)) {
+		raid_device_fini(device->block->raid_dev);
+		device->block->raid_dev = raid_device_duplicate(device->raid);
+	}
+
+	if ((device->state & SLAVE_STATE_FAULTY) != 0) {
+		_set_block_state(device->block, IBPI_PATTERN_FAILED_DRIVE);
+	} else if ((device->
 	     state & (SLAVE_STATE_BLOCKED | SLAVE_STATE_WRITE_MOSTLY)) != 0) {
 		_set_block_state(device->block, IBPI_PATTERN_NORMAL);
-	} else if ((device->state & SLAVE_STATE_FAULTY) != 0) {
-		_set_block_state(device->block, IBPI_PATTERN_FAILED_DRIVE);
 	} else if ((device->state & SLAVE_STATE_SPARE) != 0) {
-		if (_is_failed_array(device->raid) == 0)
-			_set_block_state(device->block, IBPI_PATTERN_REBUILD);
-		else
+		if (_is_failed_array(device->raid) == 0) {
+			if (device->raid->sync_action != RAID_ACTION_RESHAPE ||
+			    conf.blink_on_migration == 1)
+				_set_block_state(device->block,
+						 IBPI_PATTERN_REBUILD);
+		} else {
 			_set_block_state(device->block, IBPI_PATTERN_HOTSPARE);
+		}
 	} else if ((device->state & SLAVE_STATE_IN_SYNC) != 0) {
 		switch (_is_failed_array(device->raid)) {
 		case 0:
@@ -569,200 +561,81 @@ static void _determine(struct slave_device *device)
 	}
 }
 
-/**
- */
-status_t sysfs_init(void)
+static void _determine_slaves(struct list *slave_list)
 {
-	sysfs_block_list = NULL;
-	volum_list = NULL;
-	cntrl_list = NULL;
-	slave_list = NULL;
-	cntnr_list = NULL;
-	enclo_list = NULL;
-	slots_list = NULL;
+	struct slave_device *device;
 
-	if (list_init(&sysfs_block_list) != STATUS_SUCCESS)
-		return STATUS_BLOCK_LIST_ERROR;
-
-	if (list_init(&volum_list) != STATUS_SUCCESS)
-		return STATUS_VOLUM_LIST_ERROR;
-
-	if (list_init(&cntrl_list) != STATUS_SUCCESS)
-		return STATUS_CNTRL_LIST_ERROR;
-
-	if (list_init(&slave_list) != STATUS_SUCCESS)
-		return STATUS_SLAVE_LIST_ERROR;
-
-	if (list_init(&cntnr_list) != STATUS_SUCCESS)
-		return STATUS_CNTNR_LIST_ERROR;
-
-	if (list_init(&enclo_list) != STATUS_SUCCESS)
-		return STATUS_ENCLO_LIST_ERROR;
-
-	if (list_init(&slots_list) != STATUS_SUCCESS)
-		return STATUS_SLOTS_LIST_ERROR;
-
-	return STATUS_SUCCESS;
+	list_for_each(slave_list, device)
+		_determine(device);
 }
 
-/**
- */
-void sysfs_fini(void)
+void sysfs_init(void)
 {
-	if (sysfs_block_list) {
-		list_for_each(sysfs_block_list, block_device_fini);
-		list_fini(sysfs_block_list);
-	}
-	if (volum_list) {
-		list_for_each(volum_list, raid_device_fini);
-		list_fini(volum_list);
-	}
-	if (cntrl_list) {
-		list_for_each(cntrl_list, cntrl_device_fini);
-		list_fini(cntrl_list);
-	}
-	if (slave_list) {
-		list_for_each(slave_list, slave_device_fini);
-		list_fini(slave_list);
-	}
-	if (cntnr_list) {
-		list_for_each(cntnr_list, raid_device_fini);
-		list_fini(cntnr_list);
-	}
-	if (enclo_list) {
-		list_for_each(enclo_list, enclosure_device_fini);
-		list_fini(enclo_list);
-	}
-	if (slots_list) {
-		list_for_each(slots_list, pci_slot_fini);
-		list_fini(slots_list);
-	}
+	list_init(&sysfs_block_list, (item_free_t)block_device_fini);
+	list_init(&volum_list, (item_free_t)raid_device_fini);
+	list_init(&cntrl_list, (item_free_t)cntrl_device_fini);
+	list_init(&slave_list, (item_free_t)slave_device_fini);
+	list_init(&cntnr_list, (item_free_t)raid_device_fini);
+	list_init(&enclo_list, (item_free_t)enclosure_device_fini);
+	list_init(&slots_list, (item_free_t)pci_slot_fini);
 }
 
-/**
- */
-status_t sysfs_reset(void)
+void sysfs_reset(void)
 {
-	if (sysfs_block_list) {
-		list_for_each(sysfs_block_list, block_device_fini);
-		list_delete(sysfs_block_list);
-	}
-	if (volum_list) {
-		list_for_each(volum_list, raid_device_fini);
-		list_delete(volum_list);
-	}
-	if (cntrl_list) {
-		list_for_each(cntrl_list, cntrl_device_fini);
-		list_delete(cntrl_list);
-	}
-	if (slave_list) {
-		list_for_each(slave_list, slave_device_fini);
-		list_delete(slave_list);
-	}
-	if (cntnr_list) {
-		list_for_each(cntnr_list, raid_device_fini);
-		list_delete(cntnr_list);
-	}
-	if (enclo_list) {
-		list_for_each(enclo_list, enclosure_device_fini);
-		list_delete(enclo_list);
-	}
-	return STATUS_SUCCESS;
+	list_erase(&sysfs_block_list);
+	list_erase(&volum_list);
+	list_erase(&cntrl_list);
+	list_erase(&slave_list);
+	list_erase(&cntnr_list);
+	list_erase(&enclo_list);
+	list_erase(&slots_list);
 }
 
-/**
- */
-status_t sysfs_scan(void)
+void sysfs_scan(void)
 {
-	if (enclo_list == NULL)
-		return STATUS_NULL_POINTER;
+	_scan_enclo();
+	_scan_cntrl();
+	_scan_slots();
+	_scan_block();
+	_scan_raid();
+	_scan_slave();
 
-	if (_scan_enclo() != STATUS_SUCCESS)
-		return STATUS_ENCLO_LIST_ERROR;
-
-	if (cntrl_list == NULL)
-		return STATUS_NULL_POINTER;
-
-	if (_scan_cntrl() != STATUS_SUCCESS)
-		return STATUS_CNTRL_LIST_ERROR;
-
-	if (sysfs_block_list == NULL)
-		return STATUS_NULL_POINTER;
-
-	if (_scan_block() != STATUS_SUCCESS)
-		return STATUS_BLOCK_LIST_ERROR;
-
-	if (volum_list == NULL)
-		return STATUS_NULL_POINTER;
-
-	if (_scan_raid() != STATUS_SUCCESS)
-		return STATUS_VOLUM_LIST_ERROR;
-
-	if (slave_list == NULL)
-		return STATUS_NULL_POINTER;
-
-	if (_scan_slave() != STATUS_SUCCESS)
-		return STATUS_SLAVE_LIST_ERROR;
-
-	if (slots_list == NULL)
-		return STATUS_NULL_POINTER;
-
-	if (_scan_slots() != STATUS_SUCCESS)
-		return STATUS_ENCLO_LIST_ERROR;
-
-	return list_for_each(slave_list, _determine);
+	_determine_slaves(&slave_list);
 }
 
 /*
  * The function reutrns list of enclosure devices attached to SAS/SCSI storage
  * controller(s).
  */
-void *sysfs_get_enclosure_devices(void)
+const struct list *sysfs_get_enclosure_devices(void)
 {
-	return list_head(enclo_list);
+	return &enclo_list;
 }
 
 /*
  * The function returns list of controller devices present in the system.
  */
-void *sysfs_get_cntrl_devices(void)
+const struct list *sysfs_get_cntrl_devices(void)
 {
-	return list_head(cntrl_list);
+	return &cntrl_list;
 }
 
 /*
- * The function executes action() function for each block device on the list.
- * See sysfs.h for details.
+ * The function returns list of RAID volumes present in the system.
  */
-status_t __sysfs_block_device_for_each(action_t action, void *parm)
+const struct list *sysfs_get_volumes(void)
 {
-	return __list_for_each(sysfs_block_list, action, parm);
+	return &volum_list;
 }
 
-/*
- * The function is looking for block device according to criteria defined by
- * 'test' function. See sysfs.h for details.
- */
-void *__sysfs_block_device_first_that(test_t test, void *parm)
+const struct list *sysfs_get_block_devices(void)
 {
-	return __list_first_that(sysfs_block_list, test, parm);
+	return &sysfs_block_list;
 }
 
-/*
- * The function is looking for PCI hotplug slot according to criteria defined
- * by 'test' function. See sysfs.h for details.
- */
-void *__sysfs_pci_slot_first_that(test_t test, void *parm)
+const struct list *sysfs_get_pci_slots(void)
 {
-	return __list_first_that(slots_list, test, parm);
-}
-
-/**
- */
-static int _enclo_match(struct enclosure_device *device, const char *path)
-{
-	return (device->sysfs_path != NULL) &&
-	    (strncmp(device->sysfs_path, path, strlen(path)) == 0);
+	return &slots_list;
 }
 
 /*
@@ -771,22 +644,31 @@ static int _enclo_match(struct enclosure_device *device, const char *path)
  */
 int sysfs_enclosure_attached_to_cntrl(const char *path)
 {
-	return (list_first_that(enclo_list, _enclo_match, path) != NULL);
+	struct enclosure_device *device;
+
+	list_for_each(&enclo_list, device) {
+		if ((device->sysfs_path != NULL) &&
+		    (strncmp(device->sysfs_path, path, strlen(path)) == 0))
+			return 1;
+	}
+	return 0;
 }
 
 /*
- * This function checks if driver type is isci.
+ * This function checks driver type.
  */
-int sysfs_isci_driver(const char *path)
+int sysfs_check_driver(const char *path, const char *driver)
 {
 	char buf[PATH_MAX];
+	char driver_path[PATH_MAX];
 	char *link;
 	int found = 0;
 	str_cpy(buf, path, PATH_MAX);
-	str_cat(buf, "/driver", PATH_MAX);
+	str_cat(buf, "/driver", PATH_MAX - 1);
+	snprintf(driver_path, PATH_MAX - 1, "/%s", driver);
 
 	link = realpath(buf, NULL);
-	if (link && strstr(link, "/isci"))
+	if (link && strstr(link, driver_path))
 		found = 1;
 	free(link);
 	return found;

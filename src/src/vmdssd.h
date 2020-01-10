@@ -1,5 +1,7 @@
 /*
- * Copyright (c) 2016, Intel Corporation
+ * Intel(R) Enclosure LED Utilities
+ * Copyright (c) 2016-2017, Intel Corporation
+ *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
@@ -18,7 +20,11 @@
 #ifndef _VMDSSD_H
 #define _VMDSSD_H
 
+#include "block.h"
+#include "ibpi.h"
+
 int vmdssd_write(struct block_device *device, enum ibpi_pattern ibpi);
 char *vmdssd_get_path(const char *path, const char *cntrl_path);
+struct pci_slot *vmdssd_find_pci_slot(char *device_path);
 
 #endif

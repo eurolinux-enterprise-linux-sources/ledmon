@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -19,6 +19,12 @@
 
 #ifndef _BLOCK_H_INCLUDED_
 #define _BLOCK_H_INCLUDED_
+
+#include "cntrl.h"
+#include "ibpi.h"
+#include "time.h"
+#include "list.h"
+#include "raid.h"
 
 struct block_device;
 
@@ -120,7 +126,13 @@ struct block_device {
  */
 	int encl_index;
 
-	char encl_dev[PATH_MAX];
+	struct enclosure_device *enclosure;
+
+/**
+ * If disk is a raid member, this field will be set with a copy of raid device
+ * struct.
+ */
+	struct raid_device *raid_dev;
 };
 
 /**
@@ -138,17 +150,12 @@ struct block_device {
  * @return Pointer to block device structure if successful, otherwise the function
  *         returns the NULL pointer.
  */
-struct block_device *block_device_init(void *cntrl_list, const char *path);
+struct block_device *block_device_init(const struct list *cntrl_list, const char *path);
 
 /**
  * @brief Releases a block device structure.
  *
  * This function releases memory allocated for block device structure.
- * To be more specific it only frees memory allocated for the structure fields.
- * It is due to the way list is implemented for the purpose of this utility.
- * If one would like release block device structure not stored as a list node
- * it must call free() explicitly just after function block_device_fini()
- * is called.
  *
  * @param[in]      device         pointer to block device structure.
  *
@@ -184,7 +191,7 @@ struct block_device *block_device_duplicate(struct block_device *device);
  *         returns NULL pointer. The NULL pointer means that block devices is
  *         connected to unsupported storage controller.
  */
-struct cntrl_device *block_get_controller(void *cntrl_list, char *path);
+struct cntrl_device *block_get_controller(const struct list *cntrl_list, char *path);
 
 /**
  * The global timestamp variable. It is updated every time the sysfs is scanning
@@ -202,5 +209,22 @@ int dev_directly_attached(const char *path);
  * @brief Gets the host structure for given control device and host_id
  */
 struct _host_type *block_get_host(struct cntrl_device *cntrl, int host_id);
+
+
+/**
+ * @brief Checks the presence of block device.
+ *
+ * This is internal function of monitor service. The function is checking
+ * whether block device is already on the list or it is missing from the list.
+ * The function is design to be used as 'test' parameter for list_find_first()
+ * function.
+ *
+ * @param[in]    bd_old          - an element from a list to compare to.
+ * @param[in]    bd_new          - a block device being searched.
+ *
+ * @return 0 if the block devices do not match, otherwise function returns 1.
+ */
+int block_compare(const struct block_device *bd_old,
+		  const struct block_device *bd_new);
 
 #endif				/* _BLOCK_H_INCLUDED_ */

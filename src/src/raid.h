@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -92,4 +92,12 @@ struct raid_device *raid_device_init(const char *path, unsigned int device_num,
  */
 void raid_device_fini(struct raid_device *device);
 
+/**
+ */
+struct raid_device *raid_device_duplicate(struct raid_device *device);
+
+/**
+ */
+struct raid_device *find_raid_device(const struct list *raid_list,
+				     char *raid_sysfs_path);
 #endif				/* _RAID_H_INCLUDED_ */

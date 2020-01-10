@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2017 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -19,6 +19,10 @@
 
 #ifndef _PIDFILE_H_INCLUDED_
 #define _PIDFILE_H_INCLUDED_
+
+#include <unistd.h>
+
+#include "status.h"
 
 /**
  */

@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,25 +17,39 @@
  *
  */
 
-#include <config.h>
-
+#include <dirent.h>
 #include <limits.h>
-#include <string.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
-#include <dirent.h>
+#include <string.h>
 
 #if _HAVE_DMALLOC_H
 #include <dmalloc.h>
 #endif
 
-#include "status.h"
-#include "list.h"
 #include "cntrl.h"
-#include "utils.h"
-#include "sysfs.h"
+#include "config.h"
+#include "config_file.h"
+#include "list.h"
 #include "smp.h"
+#include "status.h"
+#include "sysfs.h"
+#include "utils.h"
+
+/**
+ * @brief Name of controllers types.
+ *
+ * This is internal array with names of controller types. Array can be use to
+ * translate enumeration type into the string.
+ */
+static const char * const ctrl_type_str[] = {
+	[CNTRL_TYPE_UNKNOWN] = "?",
+	[CNTRL_TYPE_DELLSSD] = "Dell SSD",
+	[CNTRL_TYPE_VMD]     = "VMD",
+	[CNTRL_TYPE_SCSI]    = "SCSI",
+	[CNTRL_TYPE_AHCI]    = "AHCI"
+};
 
 /**
  */
@@ -49,7 +63,7 @@ static int _is_storage_controller(const char *path)
  */
 static int _is_isci_cntrl(const char *path)
 {
-	return sysfs_isci_driver(path);
+	return sysfs_check_driver(path, "isci");
 }
 
 /**
@@ -89,14 +103,14 @@ static int _is_dellssd_cntrl(const char *path)
 static int _is_smp_cntrl(const char *path)
 {
 	int result = 0;
-	void *dir = scan_dir(path);
+	struct list dir;
 	char *p;
 	char host_path[PATH_MAX] = { 0 };
-	char *host;
-	if (dir) {
-		host = list_head(dir);
-		while (host) {
-			p = strrchr(host, '/');
+	if (scan_dir(path, &dir) == 0) {
+		const char *dir_path;
+
+		list_for_each(&dir, dir_path) {
+			p = strrchr(dir_path, '/');
 			if (!p++)
 				break;
 			if (strncmp(p, "host", strlen("host")) == 0) {
@@ -109,74 +123,16 @@ static int _is_smp_cntrl(const char *path)
 					"",
 					0) == 0;
 			}
-			host = list_next(host);
 		}
-		list_fini(dir);
+		list_erase(&dir);
 	}
 
 	return result;
 }
 
-/*
- * Check if this controller is VMD
- */
-static int is_vmd_controller(const char *path)
-{
-	int ret = 0;
-	DIR *dir;
-
-	dir = opendir("/sys/bus/pci/drivers/vmd");
-	if (dir) {
-		struct dirent *ent;
-		char cpath[PATH_MAX];
-
-		memset(cpath, 0, sizeof(cpath));
-
-		for (ent = readdir(dir); ent; ent = readdir(dir)) {
-			char *rp, *c;
-
-			/* is 'ent' a device? check that the 'subsystem' link exists and
-			 * that its target matches 'bus'
-			 */
-			snprintf(cpath, sizeof(cpath) - 1,
-				 "/sys/bus/pci/drivers/vmd/%s/subsystem", ent->d_name);
-			rp = realpath(cpath, NULL);
-			if (rp == NULL)
-				continue;
-
-			c = strrchr(rp, '/');
-			if (c == NULL)
-				goto free_path;
-			if (strncmp("pci", c + 1, strlen("pci")) != 0)
-				goto free_path;
-
-			free(rp);
-
-			snprintf(cpath, sizeof(cpath) - 1,
-				 "/sys/bus/pci/drivers/vmd/%s", ent->d_name);
-			rp = realpath(cpath, NULL);
-			if (rp == NULL)
-				continue;
-
-			if (strncmp(path, rp, strlen(rp)) == 0) {
-				free(rp);
-				ret = 1;
-				break;
-			}
-free_path:
-			free(rp);
-		}
-		closedir(dir);
-	}
-
-	return ret;
-}
-
 static int _is_vmd_cntrl(const char *path)
 {
-	uint64_t cls = get_uint64(path, 0, "class");
-
-	return (cls == 0x10802) && is_vmd_controller(path);  /* nvme ssd */
+	return sysfs_check_driver(path, "vmd");
 }
 
 /**
@@ -196,10 +152,10 @@ static enum cntrl_type _get_type(const char *path)
 {
 	enum cntrl_type type = CNTRL_TYPE_UNKNOWN;
 
-	if (_is_dellssd_cntrl(path)) {
-		type = CNTRL_TYPE_DELLSSD;
-	} else if (_is_vmd_cntrl(path)) {
+	if (_is_vmd_cntrl(path)) {
 		type = CNTRL_TYPE_VMD;
+	} else if (_is_dellssd_cntrl(path)) {
+		type = CNTRL_TYPE_DELLSSD;
 	} else if (_is_storage_controller(path)) {
 		if (_is_ahci_cntrl(path))
 			type = CNTRL_TYPE_AHCI;
@@ -280,10 +236,13 @@ void _find_host(const char *path, struct _host_type **hosts)
 static struct _host_type *_cntrl_get_hosts(const char *path)
 {
 	struct _host_type *hosts = NULL;
-	void *dir = scan_dir(path);
-	if (dir) {
-		list_for_each_parm(dir, _find_host, &hosts);
-		list_fini(dir);
+	struct list dir;
+	if (scan_dir(path, &dir) == 0) {
+		const char *dir_path;
+
+		list_for_each(&dir, dir_path)
+			_find_host(dir_path, &hosts);
+		list_erase(&dir);
 	}
 	return hosts;
 }
@@ -377,6 +336,29 @@ struct cntrl_device *cntrl_device_init(const char *path)
 			em_enabled = 0;
 		}
 		if (em_enabled) {
+			if (!list_is_empty(&conf.cntrls_whitelist)) {
+				char *cntrl = NULL;
+
+				list_for_each(&conf.cntrls_whitelist, cntrl) {
+					if (match_string(cntrl, path))
+						break;
+					cntrl = NULL;
+				}
+				if (!cntrl) {
+					log_debug("%s not found on whitelist, ignoring", path);
+					return NULL;
+				}
+			} else if (!list_is_empty(&conf.cntrls_blacklist)) {
+				char *cntrl;
+
+				list_for_each(&conf.cntrls_blacklist, cntrl) {
+					if (match_string(cntrl, path)) {
+						log_debug("%s found on blacklist, ignoring",
+							  path);
+						return NULL;
+					}
+				}
+			}
 			device = malloc(sizeof(struct cntrl_device));
 			if (device) {
 				if (type == CNTRL_TYPE_SCSI) {
@@ -407,5 +389,12 @@ void cntrl_device_fini(struct cntrl_device *device)
 	if (device) {
 		free(device->sysfs_path);
 		free_hosts(device->hosts);
+		free(device);
 	}
+}
+
+void print_cntrl(struct cntrl_device *ctrl_dev)
+{
+		printf("%s (%s)\n", ctrl_dev->sysfs_path,
+			ctrl_type_str[ctrl_dev->cntrl_type]);
 }

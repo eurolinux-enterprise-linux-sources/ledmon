@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,23 +17,20 @@
  *
  */
 
-#include <config.h>
-
-#include <unistd.h>
 #include <errno.h>
-#include <stdio.h>
-#include <string.h>
 #include <limits.h>
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #if _HAVE_DMALLOC_H
 #include <dmalloc.h>
 #endif
 
-#include "ibpi.h"
-#include "block.h"
 #include "ahci.h"
+#include "config.h"
 #include "utils.h"
 
 /**
@@ -47,18 +44,24 @@
  * uses this control number to issue SGPIO signals appropriately.
  */
 static const unsigned int ibpi2sgpio[] = {
+	[IBPI_PATTERN_REBUILD]        = 0x00480000,
+	[IBPI_PATTERN_FAILED_DRIVE]   = 0x00400000,
+	[IBPI_PATTERN_LOCATE]         = 0x00080000,
 	[IBPI_PATTERN_UNKNOWN]        = 0x00000000,
 	[IBPI_PATTERN_ONESHOT_NORMAL] = 0x00000000,
 	[IBPI_PATTERN_NORMAL]         = 0x00000000,
+	[IBPI_PATTERN_LOCATE_OFF]     = 0x00000000,
+#ifdef DEBUG_IBPI
 	[IBPI_PATTERN_DEGRADED]       = 0x00200000,
-	[IBPI_PATTERN_REBUILD]        = 0x00480000,
-	[IBPI_PATTERN_REBUILD_P]      = 0x00480000,
 	[IBPI_PATTERN_FAILED_ARRAY]   = 0x00280000,
 	[IBPI_PATTERN_HOTSPARE]       = 0x01800000,
-	[IBPI_PATTERN_PFA]            = 0x01400000,
-	[IBPI_PATTERN_FAILED_DRIVE]   = 0x00400000,
-	[IBPI_PATTERN_LOCATE]         = 0x00080000,
-	[IBPI_PATTERN_LOCATE_OFF]     = 0x00000000
+	[IBPI_PATTERN_PFA]            = 0x01400000
+#else
+	[IBPI_PATTERN_DEGRADED]       = 0x00000000,
+	[IBPI_PATTERN_FAILED_ARRAY]   = 0x00000000,
+	[IBPI_PATTERN_HOTSPARE]       = 0x00000000,
+	[IBPI_PATTERN_PFA]            = 0x00000000
+#endif
 };
 
 /*

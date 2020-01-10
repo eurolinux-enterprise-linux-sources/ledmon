@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -19,6 +19,9 @@
 
 #ifndef _SLAVE_H_INCLUDED_
 #define _SLAVE_H_INCLUDED_
+
+#include "block.h"
+#include "raid.h"
 
 /**
  */
@@ -41,7 +44,7 @@ struct slave_device {
 
 /**
  */
-struct slave_device *slave_device_init(const char *path, void *block_list);
+struct slave_device *slave_device_init(const char *path, struct list *block_list);
 
 /**
  */

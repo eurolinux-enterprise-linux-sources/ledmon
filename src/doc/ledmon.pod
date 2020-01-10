@@ -1,6 +1,6 @@
 #
 #  Intel(R) Enclosure LED Utilities
-#  Copyright (C) 2009-2016 Intel Corporation.
+#  Copyright (C) 2009-2017 Intel Corporation.
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms and conditions of the GNU General Public License,
@@ -78,7 +78,8 @@ The minimum is 5 seconds the maximum is not specified.
 
 Verbose level - 'quiet' means no logging at all and 'all' means to log
 everything. The levels are given in order. If user specifies more then one
-verbose option the last option comes into effect.
+verbose option the last option comes into effect. The default level is
+'warning'. Verbose level also can be set by B<--log-level>=I<level>.
 
 =item B<-h> or B<--help>
 
@@ -99,21 +100,17 @@ Displays version of ledmon and information about the license and exits.
 Global log file, used by ledmon application. To force logging to user defined
 file use I<-l> option switch.
 
-=item F<~/.ledctl>
-
-User configuration file, shared between ledmon and all ledctl application
-instances.
-
-=item F</etc/ledcfg.conf>
+=item F</etc/ledmon.conf>
 
 Global configuration file, shared between ledmon and all ledctl application
-instances.
+instances. Local configuration file can be used by running ledmon with I<-c>
+switch.
 
 =back
 
 =head1 LICENSE
 
-Copyright (c) 2009-2016 Intel Corporation.
+Copyright (c) 2009-2017 Intel Corporation.
 
 This program is distributed under the terms of the GNU General Public License
 as published by the Free Software Foundation. See the build-in help for details
@@ -126,7 +123,7 @@ hence the PFA pattern from SFF-8489 specification is not visualized.
 
 =head1 SEE ALSO
 
-ledctl(8), ledctl.conf(5)
+ledctl(8), ledmon.conf(5)
 
 =head1 AUTHOR
 

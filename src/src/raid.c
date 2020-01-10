@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,24 +17,24 @@
  *
  */
 
-#include <config.h>
 #include <limits.h>
-#include <string.h>
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 #if _HAVE_DMALLOC_H
 #include <dmalloc.h>
 #endif
 
-#include "status.h"
-#include "ibpi.h"
-#include "utils.h"
-#include "list.h"
-#include "sysfs.h"
 #include "block.h"
+#include "config.h"
+#include "ibpi.h"
+#include "list.h"
 #include "raid.h"
 #include "slave.h"
+#include "status.h"
+#include "sysfs.h"
+#include "utils.h"
 
 /**
  */
@@ -163,6 +163,36 @@ void raid_device_fini(struct raid_device *device)
 	if (device) {
 		if (device->sysfs_path)
 			free(device->sysfs_path);
-		/* free(device); */
+		free(device);
 	}
+}
+
+/**
+ */
+struct raid_device *raid_device_duplicate(struct raid_device *device)
+{
+	struct raid_device *new_device = NULL;
+
+	if (device) {
+		new_device = malloc(sizeof(struct raid_device));
+		if (new_device) {
+			*new_device = *device;
+			new_device->sysfs_path = strdup(device->sysfs_path);
+		}
+	}
+	return new_device;
+}
+
+/**
+ */
+struct raid_device *find_raid_device(const struct list *raid_list,
+				     char *raid_sysfs_path)
+{
+	struct raid_device *raid = NULL;
+
+	list_for_each(raid_list, raid) {
+		if (strcmp(raid->sysfs_path, raid_sysfs_path) == 0)
+			return raid;
+	}
+	return NULL;
 }

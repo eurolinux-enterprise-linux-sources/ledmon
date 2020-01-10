@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2017 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,6 +17,11 @@
  *
  */
 
+#ifndef _SES_H_INCLUDED_
+#define _SES_H_INCLUDED_
+
+#include <asm/types.h>
+
 /* Size of buffer for SES-2 Messages. */
 #define SES_ALLOC_BUFF 4096
 
@@ -27,12 +32,15 @@
 #define ENCL_ADDITIONAL_EL_STATUS	0x0a
 #define SCSI_PROTOCOL_SAS		6
 
-#define SES_DEVICE_SLOT			0x01
-#define SES_ARRAY_DEVICE_SLOT		0x17
+typedef enum __attribute__((packed)) {
+	SES_UNSPECIFIED		= 0x00,
+	SES_DEVICE_SLOT		= 0x01,
+	SES_ARRAY_DEVICE_SLOT	= 0x17,
+} element_type;
 
-static inline void _clr_msg(unsigned char *u)
+static inline void _set_prdfail(unsigned char *u)
 {
-	u[0] = u[1] = u[2] = u[3] = 0;
+	u[0] |= (1 << 6);
 }
 
 static inline void _set_abrt(unsigned char *u)
@@ -130,14 +138,36 @@ static inline void _set_fault(unsigned char *u)
 	u[3] |= (1 << 5);
 }
 
-struct ses_pages {
-	unsigned char *page1;
-	int page1_len;
-	unsigned char *page2;
-	int page2_len;
-	unsigned char *page10;
-	int page10_len;
-	unsigned char *page1_types;
-	int page1_types_len;
-	int components;
+struct ses_page {
+	unsigned char buf[SES_ALLOC_BUFF];
+	int len;
 };
+
+struct type_descriptor_header {
+	element_type element_type;
+	__u8 num_of_elements;
+	__u8 subenclosure_id;
+	__u8 type_desc_text_len;
+};
+
+struct ses_pages {
+	struct ses_page *page1;
+	struct ses_page *page2;
+	struct ses_page *page10;
+	struct type_descriptor_header *page1_types;
+	int page1_types_len;
+};
+
+struct ses_slot_ctrl_elem {
+	union {
+		struct {
+			__u8 common_control;
+			__u8 array_slot_control;
+			__u8 b2;
+			__u8 b3;
+		};
+		__u8 b[4];
+	};
+};
+
+#endif

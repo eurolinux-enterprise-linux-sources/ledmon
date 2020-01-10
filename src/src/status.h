@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2017 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -65,7 +65,8 @@ enum status_code {
 	STATUS_CMDLINE_ERROR,
 	STATUS_NOT_A_PRIVILEGED_USER,
 	STATUS_ENCLO_LIST_ERROR,
-	STATUS_SLOTS_LIST_ERROR
+	STATUS_SLOTS_LIST_ERROR,
+	STATUS_CONFIG_FILE_ERROR
 };
 
 /**

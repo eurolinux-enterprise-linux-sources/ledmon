@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -20,6 +20,9 @@
 #ifndef _SCSI_H_INCLUDED
 #define _SCSI_H_INCLUDED
 
+#include "block.h"
+#include "ibpi.h"
+
 /**
  * @brief Gets a path to slot of an enclosure.
  *
@@ -34,17 +37,14 @@
 char *scsi_get_slot_path(const char *path, const char *cntrl_path);
 
 /**
- * @brief Gets a path to slot of sas controller.
+ * @brief Prepares SES message based on ibpi pattern.
  *
- * This function returns a sysfs path to component of enclosure the device
- * belongs to.
+ * @param[in]      device         Sysfs path of a drive in enclosure.
+ * @param[in]      ibpi           IBPI pattern to visualize.
  *
- * @param[in]      path           Canonical sysfs path to block device.
- *
- * @return A sysfs path to controller device associated with the given
- *         block device if successful, otherwise NULL pointer.
+ * @return 0 on success, otherwise error.
  */
-char *sas_get_slot_path(const char *path, const char *ctrl_path);
+int scsi_ses_write(struct block_device *device, enum ibpi_pattern ibpi);
 
 /**
  * @brief Sends message to SES processor of an enclosure.
@@ -53,16 +53,14 @@ char *sas_get_slot_path(const char *path, const char *ctrl_path);
  * the given slot/component. It uses interface of ENCLOSURE kernel module to
  * control LEDs.
  *
- * @param[in]      device         Path to an enclosure device in sysfs.
- * @param[in]      ibpi           IBPI pattern to visualize.
+ * @param[in]      device         Sysfs path of a drive in enclosure.
  *
- * @return Number of characters written if successful or -1 in case of error
- *         and errno is set to appropriate error code.
+ * @return 0 on success, otherwise error.
  */
-int scsi_ses_write(struct block_device *device, enum ibpi_pattern ibpi);
+int scsi_ses_flush(struct block_device *device);
 
 /**
- * @brief Fills encl_index and encl_dev.
+ * @brief Assigns enclosure device to block device.
  *
  * @param[in]      device        Path to block device.
  *

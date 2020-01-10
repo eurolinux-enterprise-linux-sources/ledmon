@@ -1,6 +1,6 @@
 /*
  * Intel(R) Enclosure LED Utilities
- * Copyright (C) 2009-2016 Intel Corporation.
+ * Copyright (C) 2009-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -20,242 +20,217 @@
 #ifndef _LIST_H_INCLUDED_
 #define _LIST_H_INCLUDED_
 
-/**
- * This data-type represents a prototype of test function. Test function is used
- * by list_first_that() and list_last_that() functions as 'test' parameter. The
- * function should return 0 if search should continue, otherwise it should
- * return 1.
- */
-typedef int (*test_t) (void *item, void *param);
+#include <stdlib.h>
+
+struct node {
+	struct node *next, *prev;
+	struct list *list;
+	void *item;
+};
+
+typedef void (*item_free_t)(void *);
+
+struct list {
+	struct node *head, *tail;
+	item_free_t item_free;
+};
+
+#define __list_for_each_node(__list, __node, __start_fn, __iter_fn) \
+	for (struct node *__n = __start_fn(__list), *__next; \
+	     __n && (__node = __n) && ((__next = __iter_fn(__n)) || (!__next)); \
+	     __n = __next)
+
+#define list_for_each_node(__list, __node) \
+	__list_for_each_node(__list, __node, list_head, list_next)
+
+#define list_for_each_node_reverse(__list, __node) \
+	__list_for_each_node(__list, __node, list_tail, list_prev)
+
+#define __list_for_each(__list, __item, __start_fn, __iter_fn) \
+	for (struct node *__node = __start_fn(__list); \
+	     __node && ((__item = __node->item) || (!__node->item)); \
+	     __node = __iter_fn(__node))
+
+#define list_for_each(__list, __item) \
+	__list_for_each(__list, __item, list_head, list_next)
+
+#define list_for_each_reverse(__list, __item) \
+	__list_for_each(__list, __item, list_tail, list_prev)
 
 /**
- * This data-type represents a prototype of action function. Action function is
- * used by list_for_each() function as 'action' parameter.
- */
-typedef void (*action_t) (void *item, void *param);
-
-/**
- */
-#define list_for_each_parm(__list, __action, __parm) \
-	__list_for_each((void *)(__list), \
-				(action_t)(__action), (void *)(__parm))
-
-/**
- */
-#define list_for_each(__list, __action) \
-	__list_for_each((void *)(__list), (action_t)(__action), (void *)0)
-
-/**
- */
-#define list_first_that_no_parm(__list, __test) \
-	__list_first_that((void *)(__list), (test_t)(__test), (void *)0)
-
-/**
- */
-#define list_first_that(__list, __test, __parm) \
-	__list_first_that((void *)(__list), (test_t)(__test), (void *)(__parm))
-
-/**
- * @brief Creates a list object.
+ * @brief Initializes a list object.
  *
- * The function allocates memory for a new list object and initializes its
- * fields to reflect an empty state.
+ * Initializes a list object to reflect an empty state.
  *
- * @param [in,out] ptr            placeholder where the pointer to the new list
- *                                will be stored. In case of an error the NULL
- *                                pointer is stored instead.
- *
- * @return STATUS_SUCCESS if successful, otherwise a valid status_t error code.
+ * @param[in]      list           pointer to a list object.
+ * @param[in]      item_free_fn   custom callback for deallocating list items.
+ *                                If NULL, free() will be used.
  */
-status_t list_init(void **ptr);
+static inline void list_init(struct list *list, item_free_t item_free_fn)
+{
+	list->head = NULL;
+	list->tail = NULL;
+	if (item_free_fn)
+		list->item_free = item_free_fn;
+	else
+		list->item_free = free;
+}
 
 /**
- * @brief Finalizes a list object.
+ * @brief Clears a list and frees the items it contains.
  *
- * This function releases the memory allocated for a list object. The function
- * does not release the memory allocated by other function and stored
- * in elements. It only releases a placeholder where the elements are stored.
- * It is user responsibility to free allocated other memory before
- * this function is called.
+ * This function releases the memory allocated for a list object. It also frees
+ * the data items attached to list nodes. It does not free the list itself.
  *
- * @param[in]      ptr            pointer to a list object.
- *
- * @return STATUS_SUCCESS if successful, otherwise a valid status_t status code.
+ * @param[in]      list           pointer to a list object.
  */
-status_t list_fini(void *ptr);
+static inline void list_erase(struct list *list)
+{
+	void __list_erase(struct list *list, item_free_t free_fn);
+	__list_erase(list, list->item_free);
+}
+
+/**
+ * @brief Clears a list.
+ *
+ * This function removes and deallocates all nodes from the list. It does not
+ * free the data items, to do that use list_erase().
+ *
+ * @param[in]      list           pointer to a list object.
+ */
+static inline void list_clear(struct list *list)
+{
+	void __list_erase(struct list *list, item_free_t free_fn);
+	__list_erase(list, NULL);
+}
 
 /**
  * @brief Removes an element from the list.
  *
  * This function removes an element from the list. It only detaches the element
  * and does not release the memory allocated for the element. To free memory
- * allocated for an element use list_delete() function instead.
+ * allocated for an element use list_delete() instead.
  *
- * @param[in]      ptr            pointer to a list object.
- *
- * @return STATUS_SUCCESS if successful, otherwise a valid status_t status code.
+ * @param[in]      node           pointer to a node object.
  */
-status_t list_remove(void *ptr);
+static inline void list_remove(struct node *node)
+{
+	void __list_remove(struct node *node, item_free_t free_fn);
+	__list_remove(node, NULL);
+}
 
 /**
- * @brief Deletes an element.
+ * @brief Removes an element from the list and releases its memory.
  *
- * This function removes and frees memory allocated for element. If element has
- * next element not NULL then function walks deep and frees this element, too.
- * To delete the specific element only use list_remove() function first. This
- * function does not release memory allocated by other functions i.e. strings.
- * It is user responsibility to free other memory allocated before this function
- * is called. In other way the memory leaking might be observed.
+ * This function removes an element from the list and frees the memory allocated
+ * for the list node and data item.
+ *
+ * @param[in]      node           pointer to a node object.
  */
-status_t list_delete(void *ptr);
+static inline void list_delete(struct node *node)
+{
+	void __list_remove(struct node *node, item_free_t free_fn);
+	__list_remove(node, node->list->item_free);
+	free(node);
+}
 
 /**
- * @brief Adds an element in front.
+ * @brief Inserts an element into the list.
  *
- * This function adds an element to a list object. If the ptr is a list object
- * then function adds element to head of the list. If the ptr is a node object
- * function puts an element as previous element relatively to the given element.
+ * This function puts an element after a given element.
  *
- * @param[in]      ptr            pointer to list object or to node object.
- * @param[in]      data           placeholder where the information to put on
- *                                a list is stored.
- * @param[in]      size           number of bytes stored in data parameter.
- *
- * @return Pointer to element on a list if successful, otherwise a NULL and
- *         this means out of memory in the system.
+ * @param[in]      list           pointer to list object.
+ * @param[in]      item           data item to be inserted into the list.
+ * @param[in]      after          list node after which to insert the element.
+ *                                If NULL, then insert at the head of the list.
  */
-void *list_add(void *ptr, void *data, size_t size);
+void list_insert(struct list *list, void *item, struct node *after);
 
 /**
- * @brief Puts an element in back.
+ * @brief Appends an element to the end of the list.
  *
- * This function puts an element on a list object. If the ptr is a list object
- * the function puts the element on tail of a list. If the ptr is a node object
- * the function puts the element as next element relatively to the given
- * element.
+ * This function puts an element on tail of a list.
  *
- * @param[in]      ptr            pointer to list object or to node object.
- * @param[in]      data           placeholder where the information to put on
- *                                a list is stored.
- * @param[in]      size           number of bytes stored in data parameter.
- *
- * @return Pointer to element on a list if successful, otherwise a NULL and
- *         this means out of memory in the system.
+ * @param[in]      list           pointer to list object.
+ * @param[in]      item           data item to be inserted into the list.
  */
-void *list_put(void *ptr, void *data, size_t size);
+static inline void list_append(struct list *list, void *item)
+{
+	list_insert(list, item, list->tail);
+}
 
 /**
  * @brief Reruns next element.
  *
  * This function returns next element relatively to the given element.
- * If the ptr is a list object the function returns a head of the list.
  *
- * @param[in]      ptr            pointer to a list object or to node object.
+ * @param[in]      node           pointer to a node object.
  *
  * @return Pointer to an element if successful. The NULL pointer means
- *         that ptr is the last element on the list or if ptr is a list object
- *         NULL means that there's no elements on the list.
+ *         that node is the last element on the list.
  */
-void *list_next(void *ptr);
+static inline struct node *list_next(const struct node *node)
+{
+	return node->next;
+}
 
 /**
  * @brief Returns previous element.
  *
  * This function returns previous element relatively to the given element.
- * If the ptr is a list object the function returns a tail of the list.
  *
- * @param[in]      ptr            pointer to a list object or to node object.
+ * @param[in]      node           pointer to a node object.
  *
  * @return Pointer to an element if successful. The NULL pointer means
- *         that ptr is the first element on the list or if ptr is a list object
- *         the NULL means that there's no elements on the list.
+ *         that node is the first element on the list.
  */
-void *list_prev(void *ptr);
+static inline struct node *list_prev(const struct node *node)
+{
+	return node->prev;
+}
 
 /**
  * @brief Returns head of a list.
  *
  * This function returns a head of a list.
  *
- * @param[in]      ptr            pointer to a list object or to node object.
+ * @param[in]      list           pointer to a list object.
  *
  * @return Pointer to an element if successful. The NULL pointer means that
  *         there's no element on a list.
  */
-void *list_head(void *ptr);
+static inline struct node *list_head(const struct list *list)
+{
+	return list->head;
+}
 
 /**
  * @brief Returns tail of a list.
  *
  * This function returns a tail of a list.
  *
- * @param[in]      ptr            pointer to a list object or to node object.
+ * @param[in]      list           pointer to a list object.
  *
  * @return Pointer to an element if successful. The NULL pointer means that
  *         there's no element on a list.
  */
-void *list_tail(void *ptr);
+static inline struct node *list_tail(const struct list *list)
+{
+	return list->tail;
+}
 
 /**
  * @brief Checks if a list is empty.
  *
  * This function checks if a list object has elements.
  *
- * @param[in]      ptr            pointer to a list object only.
+ * @param[in]      list           pointer to a list object.
  *
  * @return 1 if list is empty, otherwise the function returns 0.
  */
-int list_is_empty(void *ptr);
-
-/**
- * @brief Walks through each element.
- *
- * This function invokes the action function for each element on a list.
- * Refer to action_t data-type for details about the function prototype.
- *
- * @param[in]      ptr            pointer to list object or node object.
- * @param[in]      action         pointer to an action function.
- * @param[in]      parm           additional parameter to pass directly to
- *                                'action' function.
- *
- * @return STATUS_SUCCESS if successful, otherwise a valid status_t status code.
- */
-status_t __list_for_each(void *ptr, action_t action, void *parm);
-
-/**
- * @brief Searches for an element.
- *
- * This function searches for an element on a list. The function 'test' is
- * called for each element on the list and if element matches the search will
- * stop. The function starts searching from head of the list and moves to
- * next element relatively.
- *
- * @param[in]      ptr            pointer to list object or node object.
- * @param[in]      test           pointer to an test function.
- * @param[in]      parm           additional parameter to pass directly to
- *                                'test' function.
- *
- * @return Pointer to an element. If the function returns NULL that means there
- *         is no such an element on a list.
- */
-void *__list_last_that(void *ptr, test_t test, void *parm);
-
-/**
- * @brief Searches for an element backward.
- *
- * This function searches for an element on a list. The function 'test' is
- * called for each element on the list and if element matches the search will
- * stop. The function starts searching from tail of the list and moves to
- * previous element relatively.
- *
- * @param[in]      ptr            pointer to list object or node object.
- * @param[in]      test           pointer to an test function.
- * @param[in]      parm           additional parameter to pass directly to
- *                                'test' function.
- *
- * @return Pointer to an element. If the function returns NULL that means there
- *         is no such an element on a list.
- */
-void *__list_first_that(void *ptr, test_t test, void *parm);
+static inline int list_is_empty(const struct list *list)
+{
+	return (list->head == NULL);
+}
 
 #endif				/* _LIST_H_INCLUDED_ */
